@@ -119,12 +119,8 @@
   ],
   "outbounds": [
     {
-      "type": "shadowsocks",
-      "tag": "home",
-      "server": "8888",
-      "server_port": 55600,
-      "password": "99999",
-      "method": "aes-256-gcm"
+      "type": "direct",
+      "tag": "__HOME_PLACEHOLDER__"
     },
     {
       "tag":"Proxy",
