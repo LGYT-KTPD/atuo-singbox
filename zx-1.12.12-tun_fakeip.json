@@ -325,8 +325,7 @@
       "tag":"China",
       "type":"selector",
       "outbounds":[
-        "direct",
-        "Proxy"
+        "direct"       
       ]
     },
     {
