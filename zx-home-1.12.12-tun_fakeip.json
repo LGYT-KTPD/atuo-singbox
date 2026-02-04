@@ -320,8 +320,7 @@
       "tag":"China",
       "type":"selector",
       "outbounds":[
-        "direct",
-        "Proxy"
+        "direct"
       ]
     },
     {
@@ -407,7 +406,16 @@
       {
         "domain_suffix": [
         "ktpd.fun",
-        "zdljxdf.vip"
+        "zdljxdf.vip",
+        "weixin.qq.com",
+        "wx.qq.com",
+        "qpic.cn",
+        "gtimg.com",
+        "qlogo.cn",
+        "tenpay.com",
+        "wechat.com",
+        "mmbiz.qpic.cn",
+        "mmbiz.qlogo.cn"
         ],
         "outbound": "direct"
       },
