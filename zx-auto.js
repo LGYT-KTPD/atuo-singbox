@@ -118,7 +118,7 @@ log(`⑥ 注入 home(Shadowsocks)`)
 const HOME_SERVER = process.env.HOME_SS_SERVER
 const HOME_PORT = Number(process.env.HOME_SS_PORT)
 const HOME_PASS = process.env.HOME_SS_PASSWORD
-const HOME_METHOD = process.env.HOME_SS_METHOD || 'aes-256-gcm'
+const HOME_METHOD = process.env.HOME_SS_METHOD || '2022-blake3-chacha20-poly1305'
 
 // 只有当环境变量齐全时才注入，避免你忘配导致脚本报错
 if (HOME_SERVER && HOME_PORT && HOME_PASS) {
