@@ -13,8 +13,7 @@
     },
     "cache_file": {
       "enabled": true,
-      "store_fakeip": true,
-      "store_rdrc": true
+      "store_fakeip": true
     }
   },
   "dns": {
@@ -46,11 +45,13 @@
     "rules": [
       {
         "clash_mode": "direct",
-        "server": "local"
+        "server": "local",
+        "action": "route"
       },
       {
         "clash_mode": "global",
-        "server": "google"
+        "server": "google",
+        "action": "route"
       },
       {
         "query_type": [
@@ -58,11 +59,13 @@
           "AAAA"
         ],
         "rule_set": "geosite-cn",
-        "server": "fakeip"
+        "server": "fakeip",
+        "action": "route"
       },
       {
         "rule_set": "geosite-cn",
-        "server": "local"
+        "server": "local",
+        "action": "route"
       },
       {
         "type": "logical",
@@ -77,17 +80,18 @@
           }
         ],
         "server": "google",
-        "client_subnet": "114.114.114.114/24"
+        "client_subnet": "114.114.114.114/24",
+        "action": "route"
       },
       {
         "query_type": [
           "A",
           "AAAA"
         ],
-        "server": "fakeip"
+        "server": "fakeip",
+        "action": "route"
       }
     ],
-    "independent_cache": true,
     "strategy": "prefer_ipv4"
   },
   "inbounds": [
