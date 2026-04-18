@@ -74,30 +74,6 @@
         "action": "route"
       },
       {
-        "rule_set": "geosite-geolocation-!cn",
-        "invert": true,
-        "server": "google",
-        "client_subnet": "114.114.114.114/24",
-        "action": "evaluate"
-      },
-      {
-        "type": "logical",
-        "mode": "and",
-        "match_response": true,
-        "rules": [
-          {
-            "rule_set": "geosite-geolocation-!cn",
-            "invert": true
-          },
-          {
-            "rule_set": "geoip-cn"
-          }
-        ],
-        "server": "google",
-        "client_subnet": "114.114.114.114/24",
-        "action": "route"
-      },
-      {
         "query_type": [
           "A",
           "AAAA"
