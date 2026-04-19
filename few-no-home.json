@@ -8,7 +8,7 @@
       "external_ui": "ui",
       "secret": "",
       "external_ui_download_url": "https://gh-proxy.com/https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip",
-      "external_ui_download_detour": "direct",
+      "external_ui_download_http_client": "direct-http",
       "default_mode": "rule"
     },
     "cache_file": {
@@ -16,6 +16,12 @@
       "store_fakeip": true
     }
   },
+  "http_clients": [
+    {
+      "tag": "direct-http",
+      "detour": "direct"
+    }
+  ],
   "dns": {
     "servers": [
       {
@@ -217,28 +223,28 @@
         "type": "remote",
         "format": "binary",
         "url": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/category-ads-all.srs",
-        "download_detour": "direct"
+        "http_client": "direct-http"
       },
       {
         "tag": "geosite-geolocation-!cn",
         "type": "remote",
         "format": "binary",
         "url": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/geolocation-!cn.srs",
-        "download_detour": "direct"
+        "http_client": "direct-http"
       },
       {
         "tag": "geoip-cn",
         "type": "remote",
         "format": "binary",
         "url": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/cn.srs",
-        "download_detour": "direct"
+        "http_client": "direct-http"
       },
       {
         "tag": "geosite-cn",
         "type": "remote",
         "format": "binary",
         "url": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/cn.srs",
-        "download_detour": "direct"
+        "http_client": "direct-http"
       }
     ]
   }
