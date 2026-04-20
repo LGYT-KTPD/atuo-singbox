@@ -1,6 +1,6 @@
 {
   "log": {
-    "level": "error"
+    "level": "debug"
   },
   "experimental": {
     "clash_api": {
@@ -49,6 +49,26 @@
       }
     ],
     "rules": [
+      {
+        "domain": [
+          "ly.ktpd.fun",
+          "ds.ktpd.fun",
+          "qb.ktpd.fun",
+          "sp.ktpd.fun",
+          "al.ktpd.fun",
+          "note.ktpd.fun",
+          "na.ktpd.fun",
+          "ydy.ktpd.fun",
+          "tx.ktpd.fun",
+          "pv.ktpd.fun",
+          "fn.ktpd.fun",
+          "op.ktpd.fun",
+          "im.ktpd.fun",
+          "hb.ktpd.fun"
+        ],
+        "action": "route",
+        "server": "home-dns"
+      },
       {
         "domain_suffix": [
           "ktpd.fun"
@@ -119,8 +139,12 @@
   ],
   "outbounds": [
     {
-      "type": "direct",
-      "tag": "__HOME_PLACEHOLDER__"
+      "type": "shadowsocks",
+      "tag": "home",
+      "server": "t*********",
+      "server_port": *******,
+      "password": "***************",
+      "method": "2022-blake3-chacha20-poly1305"
     },
     {
       "tag": "Proxy",
@@ -154,6 +178,25 @@
       {
         "ip_cidr": [
           "192.168.1.0/24"
+        ],
+        "outbound": "home"
+      },
+      {
+        "domain": [
+          "ly.ktpd.fun",
+          "ds.ktpd.fun",
+          "qb.ktpd.fun",
+          "sp.ktpd.fun",
+          "al.ktpd.fun",
+          "note.ktpd.fun",
+          "na.ktpd.fun",
+          "ydy.ktpd.fun",
+          "tx.ktpd.fun",
+          "pv.ktpd.fun",
+          "fn.ktpd.fun",
+          "op.ktpd.fun",
+          "im.ktpd.fun",
+          "hb.ktpd.fun"
         ],
         "outbound": "home"
       },
