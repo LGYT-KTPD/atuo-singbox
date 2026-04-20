@@ -3,6 +3,7 @@
 // 1. 读取订阅节点
 // 2. 把所有节点统一插入到 auto 组
 // 3. Proxy 组只负责在 auto / direct 之间切换
+// 4. 生成后做基础校验
 
 log(`🚀 开始`)
 
@@ -81,6 +82,17 @@ if (autoGroup.outbounds.length === 0) {
 }
 
 config.outbounds.push(...proxies)
+
+// 基础校验
+const proxyGroupCheck = config.outbounds.find(o => o?.tag === 'Proxy')
+if (!proxyGroupCheck || !Array.isArray(proxyGroupCheck.outbounds)) {
+  throw new Error('最终配置中缺少有效的 Proxy selector')
+}
+
+const autoGroupCheck = config.outbounds.find(o => o?.tag === 'auto')
+if (!autoGroupCheck || !Array.isArray(autoGroupCheck.outbounds) || autoGroupCheck.outbounds.length === 0) {
+  throw new Error('最终配置中 auto 组为空')
+}
 
 $content = JSON.stringify(config, null, 2)
 
