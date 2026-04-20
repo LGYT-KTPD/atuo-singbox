@@ -139,12 +139,8 @@
   ],
   "outbounds": [
     {
-      "type": "shadowsocks",
-      "tag": "home",
-      "server": "t*********",
-      "server_port": *******,
-      "password": "***************",
-      "method": "2022-blake3-chacha20-poly1305"
+      "type": "direct",
+      "tag": "__HOME_PLACEHOLDER__"
     },
     {
       "tag": "Proxy",
