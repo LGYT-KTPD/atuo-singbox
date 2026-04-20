@@ -2,8 +2,9 @@
 // 作用：
 // 1. 读取订阅节点
 // 2. 把所有节点统一插入到 auto 组
-// 3. Proxy 组只负责在 auto / direct / home 之间切换
+// 3. Proxy 组只负责在 home / auto / direct 之间切换
 // 4. 保留 home 注入逻辑
+// 5. 生成后做基础校验，避免产出半残配置
 
 log(`🚀 开始`)
 
@@ -95,7 +96,7 @@ if (HOME_SERVER && HOME_PORT && HOME_PASS) {
     server: HOME_SERVER,
     server_port: HOME_PORT,
     password: HOME_PASS,
-    method: HOME_METHOD,
+    method: HOME_METHOD
   }
 
   let replaced = false
@@ -126,7 +127,7 @@ if (HOME_SERVER && HOME_PORT && HOME_PASS) {
 
 config.outbounds.push(...proxies)
 
-// ⑤ 生成后校验
+// ⑤ 基础校验
 const hasHome = config.outbounds.some(o => o?.tag === 'home')
 if (!hasHome) {
   throw new Error('最终配置中缺少 tag=home 的 outbound')
