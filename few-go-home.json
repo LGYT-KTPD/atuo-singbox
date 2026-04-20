@@ -12,8 +12,7 @@
       "default_mode": "rule"
     },
     "cache_file": {
-      "enabled": true,
-      "store_fakeip": true
+      "enabled": false
     }
   },
   "dns": {
@@ -40,12 +39,6 @@
         "type": "https",
         "server": "dns.alidns.com",
         "domain_resolver": "local"
-      },
-      {
-        "tag": "fakeip",
-        "type": "fakeip",
-        "inet4_range": "198.18.0.0/15",
-        "inet6_range": "fc00::/18"
       }
     ],
     "rules": [
@@ -67,14 +60,18 @@
           "hb.ktpd.fun"
         ],
         "action": "route",
-        "server": "home-dns"
+        "server": "home-dns",
+        "disable_cache": true,
+        "disable_optimistic_cache": true
       },
       {
         "domain_suffix": [
           "ktpd.fun"
         ],
         "action": "route",
-        "server": "home-dns"
+        "server": "home-dns",
+        "disable_cache": true,
+        "disable_optimistic_cache": true
       },
       {
         "clash_mode": "direct",
@@ -87,29 +84,13 @@
         "server": "google"
       },
       {
-        "query_type": [
-          "A",
-          "AAAA"
-        ],
-        "rule_set": "geosite-cn",
-        "action": "route",
-        "server": "fakeip"
-      },
-      {
         "rule_set": "geosite-cn",
         "action": "route",
         "server": "local"
-      },
-      {
-        "query_type": [
-          "A",
-          "AAAA"
-        ],
-        "action": "route",
-        "server": "fakeip"
       }
     ],
-    "strategy": "prefer_ipv4"
+    "strategy": "prefer_ipv4",
+    "reverse_mapping": true
   },
   "inbounds": [
     {
