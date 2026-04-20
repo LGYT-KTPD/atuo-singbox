@@ -83,7 +83,6 @@ if (autoGroup.outbounds.length === 0) {
 
 log(`④ 注入 home(Shadowsocks)`)
 
-// 从容器环境变量读取（你在 Docker / Compose 里配置）
 const HOME_SERVER = process.env.HOME_SS_SERVER
 const HOME_PORT = Number(process.env.HOME_SS_PORT)
 const HOME_PASS = process.env.HOME_SS_PASSWORD
@@ -116,15 +115,32 @@ if (HOME_SERVER && HOME_PORT && HOME_PASS) {
   }
 
   const proxyGroup = config.outbounds.find(o => o?.tag === 'Proxy' && Array.isArray(o?.outbounds))
-  if (proxyGroup && !proxyGroup.outbounds.includes('home')) {
-    proxyGroup.outbounds.push('home')
-    log(`✅ 已将 home 加入 selector: Proxy`)
+  if (proxyGroup) {
+    proxyGroup.outbounds = proxyGroup.outbounds.filter(t => t !== 'home')
+    proxyGroup.outbounds.unshift('home')
+    log(`✅ 已将 home 放到 selector: Proxy 前面`)
   }
 } else {
   log(`⚠️ HOME_SS_SERVER/HOME_SS_PORT/HOME_SS_PASSWORD 未配置齐全，跳过 home 注入`)
 }
 
 config.outbounds.push(...proxies)
+
+// ⑤ 生成后校验
+const hasHome = config.outbounds.some(o => o?.tag === 'home')
+if (!hasHome) {
+  throw new Error('最终配置中缺少 tag=home 的 outbound')
+}
+
+const proxyGroupCheck = config.outbounds.find(o => o?.tag === 'Proxy')
+if (!proxyGroupCheck || !Array.isArray(proxyGroupCheck.outbounds) || !proxyGroupCheck.outbounds.includes('home')) {
+  throw new Error('最终配置中 Proxy 组未正确包含 home')
+}
+
+const autoGroupCheck = config.outbounds.find(o => o?.tag === 'auto')
+if (!autoGroupCheck || !Array.isArray(autoGroupCheck.outbounds) || autoGroupCheck.outbounds.length === 0) {
+  throw new Error('最终配置中 auto 组为空')
+}
 
 $content = JSON.stringify(config, null, 2)
 
