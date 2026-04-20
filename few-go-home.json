@@ -19,6 +19,12 @@
   "dns": {
     "servers": [
       {
+        "tag": "home-dns",
+        "type": "udp",
+        "server": "192.168.1.118",
+        "detour": "home"
+      },
+      {
         "tag": "google",
         "type": "tls",
         "server": "8.8.8.8",
@@ -43,6 +49,13 @@
       }
     ],
     "rules": [
+      {
+        "domain_suffix": [
+          "ktpd.fun"
+        ],
+        "action": "route",
+        "server": "home-dns"
+      },
       {
         "clash_mode": "direct",
         "action": "route",
@@ -146,7 +159,12 @@
       },
       {
         "domain_suffix": [
-          "ktpd.fun",
+          "ktpd.fun"
+        ],
+        "outbound": "home"
+      },
+      {
+        "domain_suffix": [
           "zdljxdf.vip",
           "weixin.qq.com",
           "wx.qq.com",
