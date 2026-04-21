@@ -52,7 +52,8 @@
           "WeChatAppEx.exe"
         ],
         "action": "route",
-        "server": "local"
+        "server": "local",
+        "strategy": "ipv4_only"
       },
       {
         "domain_suffix": [
@@ -67,39 +68,26 @@
           "weiyun.com"
         ],
         "action": "route",
-        "server": "local"
+        "server": "local",
+        "strategy": "ipv4_only"
       },
       {
         "rule_set": "geosite-cn",
         "action": "route",
         "server": "local"
-      },
-      {
-        "type": "logical",
-        "mode": "and",
-        "rules": [
-          {
-            "rule_set": "geosite-geolocation-!cn",
-            "invert": true
-          },
-          {
-            "rule_set": "geoip-cn"
-          }
-        ],
-        "action": "route",
-        "server": "google",
-        "client_subnet": "114.114.114.114/24"
       }
     ],
-    "reverse_mapping": true
+    "reverse_mapping": true,
+    "strategy": "prefer_ipv4",
+    "final": "google"
   },
   "inbounds": [
     {
       "tag": "tun-in",
       "type": "tun",
       "address": [
-        "172.19.0.0/30",
-        "fdfe:dcba:9876::0/126"
+        "172.19.0.1/30",
+        "fdfe:dcba:9876::1/126"
       ],
       "stack": "system",
       "auto_route": true,
@@ -128,20 +116,9 @@
       "tag": "Proxy",
       "type": "selector",
       "outbounds": [
-        "home",
-        "auto",
         "direct"
       ],
-      "default": "auto"
-    },
-    {
-      "tag": "auto",
-      "type": "urltest",
-      "outbounds": [],
-      "url": "http://www.gstatic.com/generate_204",
-      "interval": "3m",
-      "tolerance": 50,
-      "idle_timeout": "30m"
+      "default": "direct"
     },
     {
       "type": "direct",
@@ -160,13 +137,6 @@
         "outbound": "home"
       },
       {
-        "domain_suffix": [
-          "ktpd.fun",
-          "zdljxdf.vip"
-        ],
-        "outbound": "direct"
-      },
-      {
         "process_name": [
           "Weixin.exe",
           "WeChatAppEx.exe"
@@ -182,20 +152,6 @@
         "network": [
           "tcp",
           "udp"
-        ],
-        "outbound": "direct"
-      },
-      {
-        "domain_suffix": [
-          "weixin.qq.com",
-          "wx.qq.com",
-          "wechat.com",
-          "qpic.cn",
-          "qlogo.cn",
-          "gtimg.com",
-          "tenpay.com",
-          "url.cn",
-          "weiyun.com"
         ],
         "outbound": "direct"
       },
