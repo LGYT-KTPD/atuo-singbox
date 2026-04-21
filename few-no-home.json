@@ -59,8 +59,8 @@
       "tag": "tun-in",
       "type": "tun",
       "address": [
-        "172.19.0.0/30",
-        "fdfe:dcba:9876::0/126"
+        "172.19.0.1/30",
+        "fdfe:dcba:9876::1/126"
       ],
       "stack": "system",
       "auto_route": true,
@@ -85,19 +85,9 @@
       "tag": "Proxy",
       "type": "selector",
       "outbounds": [
-        "auto",
         "direct"
       ],
-      "default": "auto"
-    },
-    {
-      "tag": "auto",
-      "type": "urltest",
-      "outbounds": [],
-      "url": "http://www.gstatic.com/generate_204",
-      "interval": "3m",
-      "tolerance": 50,
-      "idle_timeout": "30m"
+      "default": "direct"
     },
     {
       "type": "direct",
@@ -109,22 +99,6 @@
     "auto_detect_interface": true,
     "final": "Proxy",
     "rules": [
-      {
-        "domain_suffix": [
-          "ktpd.fun",
-          "zdljxdf.vip",
-          "weixin.qq.com",
-          "wx.qq.com",
-          "qpic.cn",
-          "gtimg.com",
-          "qlogo.cn",
-          "tenpay.com",
-          "wechat.com",
-          "mmbiz.qpic.cn",
-          "mmbiz.qlogo.cn"
-        ],
-        "outbound": "direct"
-      },
       {
         "inbound": [
           "tun-in",
@@ -144,6 +118,20 @@
           }
         ],
         "action": "hijack-dns"
+      },
+      {
+        "domain_suffix": [
+          "weixin.qq.com",
+          "wx.qq.com",
+          "qpic.cn",
+          "gtimg.com",
+          "qlogo.cn",
+          "tenpay.com",
+          "wechat.com",
+          "mmbiz.qpic.cn",
+          "mmbiz.qlogo.cn"
+        ],
+        "outbound": "direct"
       },
       {
         "rule_set": "geosite-category-ads-all",
