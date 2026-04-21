@@ -1,16 +1,9 @@
-// https://raw.githubusercontent.com/LGYT-KTPD/template/refs/heads/main/zx_template.js#type=组合订阅&name=singbox&outbound=🕳ℹ️Proxy|auto🏷ℹ️^(?!.*(?:官网|剩余|流量|套餐|免费|订阅|到期时间|全球直连|GB|Expire Date|Traffic|ExpireDate)).*🕳ℹ️HongKong🏷ℹ️^(?!.*(?:us)).*(🇭🇰|HK|hk|香港|港|HongKong)🕳ℹ️TaiWan🏷ℹ️^(?!.*(?:us)).*(🇹🇼|TW|tw|台湾|臺灣|台|Taiwan)🕳ℹ️Japan🏷ℹ️^(?!.*(?:us)).*(🇯🇵|JP|jp|日本|日|Japan)🕳ℹ️Singapore🏷ℹ️^(?!.*(?:us)).*(新加坡|坡|狮城|SG|Singapore)🕳ℹ️America🏷ℹ️^(?!.*(?:AUS|RUS)).*(🇺🇸|US|us|美国|美|United States)🕳ℹ️Others🏷ℹ️^(?!.*(?:官网|剩余|流量|套餐|免费|订阅|到期时间|全球直连|GB|Expire Date|Traffic|ExpireDate|🇭🇰|HK|hk|香港|香|🇹🇼|TW|tw|台湾|台|🇸🇬|SG|sg|新加坡|狮|🇯🇵|JP|jp|日本|日|🇺🇸|US|us|美国|美|HongKong|Taiwan|Singapore|Japan|United States)).*
+// 多节点/多分组 Sub-Store 模板脚本（no-home, Real-IP 模板兼容）
+// 1. 读取订阅节点
+// 2. 按 outbound 规则把节点插入各个 selector/urltest 组
+// 3. 不做 home 注入
+// 4. 保留 regional urltest 与多媒体分组结构
 
-// 示例说明
-// 读取 名称为 "机场" 的 组合订阅 中的节点(单订阅不需要设置 type 参数)
-// 把 所有节点插入匹配 /Proxy|auto/i 的 outbound 中(跟在 🕳 后面, ℹ️ 表示忽略大小写, 不筛选节点不需要给 🏷 )
-// 把匹配 /港|hk|hongkong|kong kong|🇭🇰/i  (跟在 🏷 后面, ℹ️ 表示忽略大小写) 的节点插入匹配 /hk|hk-auto/i 的 outbound 中
-// ...
-// 可选参数: includeUnsupportedProxy 包含官方/商店版不支持的协议 SSR. 用法: `&includeUnsupportedProxy=true`
-
-// 支持传入订阅 URL. 参数为 url. 记得 url 需要 encodeURIComponent.
-// 例如: http://a.com?token=123 应使用 url=http%3A%2F%2Fa.com%3Ftoken%3D123
-
-// ⚠️ 如果 outbounds 为空, 自动创建 COMPATIBLE(direct) 并插入 防止报错
 log(`🚀 开始`)
 
 let { type, name, outbound, includeUnsupportedProxy, url } = $arguments
@@ -94,7 +87,7 @@ const compatible_outbound = {
 let compatible
 log(`⑤ 空 outbounds 检查`)
 config.outbounds.map(outbound => {
-  outbounds.map(([outboundPattern, tagRegex]) => {
+  outbounds.map(([outboundPattern]) => {
     const outboundRegex = createOutboundRegExp(outboundPattern)
     if (outboundRegex.test(outbound.tag)) {
       if (!Array.isArray(outbound.outbounds)) {
@@ -113,6 +106,12 @@ config.outbounds.map(outbound => {
 })
 
 config.outbounds.push(...proxies)
+
+// 基础校验
+const proxyGroupCheck = config.outbounds.find(o => o?.tag === 'Proxy')
+if (!proxyGroupCheck || !Array.isArray(proxyGroupCheck.outbounds)) {
+  throw new Error('最终配置中 Proxy 组不存在或格式错误')
+}
 
 $content = JSON.stringify(config, null, 2)
 
