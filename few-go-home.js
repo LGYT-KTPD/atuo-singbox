@@ -1,9 +1,9 @@
-// 简化版：适合自建 1-2 个节点
+// 单节点/少节点 Sub-Store 模板脚本
 // 作用：
 // 1. 读取订阅节点
-// 2. 把所有节点统一插入到 auto 组
-// 3. Proxy 组只负责在 home / auto / direct 之间切换
-// 4. 保留 home 注入逻辑
+// 2. 将所有订阅节点直接插入 Proxy 组
+// 3. home 单独注入，只用于回家
+// 4. 不再使用 auto/urltest
 // 5. 生成后做基础校验，避免产出半残配置
 
 log(`🚀 开始`)
@@ -55,32 +55,8 @@ if (url) {
   })
 }
 
-log(`③ 将所有订阅节点插入 auto`)
-const autoGroup = config.outbounds.find(o => o?.tag === 'auto')
-if (!autoGroup) {
-  throw new Error(`模板中未找到 tag=auto 的 outbound`)
-}
-if (!Array.isArray(autoGroup.outbounds)) {
-  autoGroup.outbounds = []
-}
-
 const proxyTags = proxies.map(p => p.tag)
-autoGroup.outbounds.push(...proxyTags)
-log(`✅ auto 插入 ${proxyTags.length} 个节点`)
-
-const compatibleOutbound = {
-  tag: 'COMPATIBLE',
-  type: 'direct',
-}
-
-if (autoGroup.outbounds.length === 0) {
-  const existed = config.outbounds.some(o => o?.tag === 'COMPATIBLE')
-  if (!existed) {
-    config.outbounds.push(compatibleOutbound)
-  }
-  autoGroup.outbounds.push('COMPATIBLE')
-  log(`⚠️ auto 为空，已自动插入 COMPATIBLE(direct)`)
-}
+log(`③ 获取到 ${proxyTags.length} 个订阅节点`)
 
 log(`④ 注入 home(Shadowsocks)`)
 
@@ -114,39 +90,57 @@ if (HOME_SERVER && HOME_PORT && HOME_PASS) {
     const existed = config.outbounds.some(o => o?.tag === 'home')
     if (!existed) config.outbounds.unshift(homeOutbound)
   }
-
-  const proxyGroup = config.outbounds.find(o => o?.tag === 'Proxy' && Array.isArray(o?.outbounds))
-  if (proxyGroup) {
-    proxyGroup.outbounds = proxyGroup.outbounds.filter(t => t !== 'home')
-    proxyGroup.outbounds.unshift('home')
-    log(`✅ 已将 home 放到 selector: Proxy 前面`)
-  }
 } else {
   log(`⚠️ HOME_SS_SERVER/HOME_SS_PORT/HOME_SS_PASSWORD 未配置齐全，跳过 home 注入`)
 }
 
+// ⑤ 将订阅节点加入 outbounds
 config.outbounds.push(...proxies)
 
-// ⑤ 基础校验
+// ⑥ 重建 Proxy 组：只包含订阅节点 + direct
+const proxyGroup = config.outbounds.find(o => o?.tag === 'Proxy' && Array.isArray(o?.outbounds))
+if (!proxyGroup) {
+  throw new Error(`模板中未找到 tag=Proxy 的 selector`)
+}
+
+proxyGroup.outbounds = [...proxyTags, 'direct']
+
+if (!proxyGroup.outbounds.length) {
+  proxyGroup.outbounds = ['direct']
+}
+
+if (!proxyGroup.default || !proxyTags.includes(proxyGroup.default)) {
+  proxyGroup.default = proxyTags[0] || 'direct'
+}
+
+log(`✅ Proxy 已注入 ${proxyTags.length} 个节点，默认=${proxyGroup.default}`)
+
+// ⑦ 清理 auto/urltest（如果模板里残留）
+config.outbounds = config.outbounds.filter(o => o?.tag !== 'auto')
+
+// ⑧ 基础校验
 const hasHome = config.outbounds.some(o => o?.tag === 'home')
 if (!hasHome) {
   throw new Error('最终配置中缺少 tag=home 的 outbound')
 }
 
 const proxyGroupCheck = config.outbounds.find(o => o?.tag === 'Proxy')
-if (!proxyGroupCheck || !Array.isArray(proxyGroupCheck.outbounds) || !proxyGroupCheck.outbounds.includes('home')) {
-  throw new Error('最终配置中 Proxy 组未正确包含 home')
+if (!proxyGroupCheck || !Array.isArray(proxyGroupCheck.outbounds)) {
+  throw new Error('最终配置中 Proxy 组不存在或格式错误')
 }
 
-const autoGroupCheck = config.outbounds.find(o => o?.tag === 'auto')
-if (!autoGroupCheck || !Array.isArray(autoGroupCheck.outbounds) || autoGroupCheck.outbounds.length === 0) {
-  throw new Error('最终配置中 auto 组为空')
+if (proxyGroupCheck.outbounds.includes('home')) {
+  throw new Error('最终配置中 Proxy 组不应包含 home')
+}
+
+if (proxyGroupCheck.outbounds.length === 0) {
+  throw new Error('最终配置中 Proxy 组为空')
 }
 
 $content = JSON.stringify(config, null, 2)
 
 function log(v) {
-  console.log(`[📦 sing-box 简化脚本] ${v}`)
+  console.log(`[📦 sing-box 单节点脚本] ${v}`)
 }
 
 log(`🔚 结束`)
