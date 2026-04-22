@@ -82,9 +82,9 @@
         "server": "google"
       }
     ],
-    "reverse_mapping": true,
-    "strategy": "prefer_ipv4",
-    "final": "public"
+    "reverse_mapping": false,
+    "strategy": "ipv4_only",
+    "final": "google"
   },
   "inbounds": [
     {
@@ -127,10 +127,14 @@
     }
   ],
   "route": {
-    "default_domain_resolver": "local",
+    "default_domain_resolver": "google",
     "auto_detect_interface": true,
     "final": "Proxy",
     "rules": [
+      {
+        "ip_version": 6,
+        "action": "reject"
+      },
       {
         "process_name": [
           "Weixin.exe",
