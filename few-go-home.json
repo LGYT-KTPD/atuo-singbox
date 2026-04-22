@@ -59,7 +59,7 @@
     ],
     "reverse_mapping": false,
     "strategy": "ipv4_only",
-    "final": "public"
+    "final": "google"
   },
   "inbounds": [
     {
@@ -106,7 +106,7 @@
     }
   ],
   "route": {
-    "default_domain_resolver": "local",
+    "default_domain_resolver": "google",
     "auto_detect_interface": true,
     "final": "Proxy",
     "rules": [
