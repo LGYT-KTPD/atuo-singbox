@@ -48,6 +48,17 @@
       },
       {
         "domain_suffix": [
+          "testingcf.jsdelivr.net",
+          "gh-proxy.com",
+          "github.com",
+          "raw.githubusercontent.com"
+        ],
+        "action": "route",
+        "server": "local",
+        "strategy": "ipv4_only"
+      },
+      {
+        "domain_suffix": [
           "weixin.qq.com",
           "wx.qq.com",
           "wechat.com",
@@ -381,7 +392,7 @@
     }
   ],
   "route": {
-    "default_domain_resolver": "google",
+    "default_domain_resolver": "local",
     "auto_detect_interface": true,
     "final": "Proxy",
     "rules": [
