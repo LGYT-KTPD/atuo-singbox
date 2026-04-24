@@ -1,6 +1,7 @@
 // iPhone / Mac 1.14 测试版专用：自建节点少节点 + SS 回家
+// 修复：不用 log()，统一用 console.log()
 
-log(`🚀 开始`)
+console.log(`🚀 开始`)
 
 let { type, name, includeUnsupportedProxy, url } = $arguments
 type = /^1$|col|组合/i.test(type) ? 'collection' : 'subscription'
@@ -49,8 +50,14 @@ if (url) {
     type,
     platform: 'sing-box',
     produceType: 'internal',
-    produceOpts: { 'include-unsupported-proxy': includeUnsupportedProxy },
-    subscription: { name, url, source: 'remote' },
+    produceOpts: {
+      'include-unsupported-proxy': includeUnsupportedProxy,
+    },
+    subscription: {
+      name,
+      url,
+      source: 'remote',
+    },
   })
 } else {
   proxies = await produceArtifact({
@@ -58,7 +65,9 @@ if (url) {
     type,
     platform: 'sing-box',
     produceType: 'internal',
-    produceOpts: { 'include-unsupported-proxy': includeUnsupportedProxy },
+    produceOpts: {
+      'include-unsupported-proxy': includeUnsupportedProxy,
+    },
   })
 }
 
@@ -108,7 +117,7 @@ if (!proxyGroup.default || !proxyTags.includes(proxyGroup.default)) {
 config.outbounds = config.outbounds.filter(o => o?.tag !== 'auto')
 
 if (!config.outbounds.some(o => o?.tag === 'home')) {
-  throw new Error('最终配置中缺少 tag=home 的 outbound')
+  throw new Error('最终配置中缺少 tag=home 的 outbound，请检查 HOME_SS_SERVER / HOME_SS_PORT / HOME_SS_PASSWORD 是否已配置')
 }
 
 if (proxyGroup.outbounds.includes('home')) {
@@ -117,4 +126,4 @@ if (proxyGroup.outbounds.includes('home')) {
 
 $content = JSON.stringify(config, null, 2)
 
-log(`✅ 完成`)
+console.log(`✅ 完成`)
