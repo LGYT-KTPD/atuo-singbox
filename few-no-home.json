@@ -47,6 +47,20 @@
         "server": "google"
       },
       {
+        "domain_suffix": [
+          "ghfast.top",
+          "raw.githubusercontent.com",
+          "github.com",
+          "gh-proxy.com",
+          "ghproxy.net",
+          "testingcf.jsdelivr.net",
+          "cdn.jsdelivr.net"
+        ],
+        "action": "route",
+        "server": "local",
+        "strategy": "ipv4_only"
+      },
+      {
         "rule_set": "geosite-cn",
         "action": "route",
         "server": "local"
@@ -102,7 +116,7 @@
     }
   ],
   "route": {
-    "default_domain_resolver": "google",
+    "default_domain_resolver": "local",
     "auto_detect_interface": true,
     "final": "Proxy",
     "rules": [
@@ -187,30 +201,32 @@
         "tag": "geosite-category-ads-all",
         "type": "remote",
         "format": "binary",
-        "url": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/category-ads-all.srs",
-        "download_detour": "direct"
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ads-all.srs"
       },
       {
         "tag": "geosite-geolocation-!cn",
         "type": "remote",
         "format": "binary",
-        "url": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/geolocation-!cn.srs",
-        "download_detour": "direct"
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-!cn.srs"
       },
       {
         "tag": "geoip-cn",
         "type": "remote",
         "format": "binary",
-        "url": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/cn.srs",
-        "download_detour": "direct"
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/cn.srs"
       },
       {
         "tag": "geosite-cn",
         "type": "remote",
         "format": "binary",
-        "url": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/cn.srs",
-        "download_detour": "direct"
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs"
       }
-    ]
-  }
+    ],
+    "default_http_client": "direct"
+  },
+  "http_clients": [
+    {
+      "tag": "direct"
+    }
+  ]
 }
