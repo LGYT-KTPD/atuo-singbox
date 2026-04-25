@@ -21,6 +21,12 @@
         "server": "223.5.5.5"
       },
       {
+        "tag": "home-dns",
+        "type": "udp",
+        "server": "192.168.1.118",
+        "detour": "wg-home"
+      },
+      {
         "tag": "proxy-dns",
         "type": "tls",
         "server": "8.8.8.8",
@@ -28,6 +34,13 @@
       }
     ],
     "rules": [
+      {
+        "ip_cidr": [
+          "192.168.1.0/24"
+        ],
+        "action": "route",
+        "server": "home-dns"
+      },
       {
         "clash_mode": "direct",
         "action": "route",
