@@ -45,6 +45,14 @@ if (!Array.isArray(config.endpoints)) config.endpoints = []
 if (!Array.isArray(config.outbounds)) config.outbounds = []
 if (!config.route) config.route = {}
 
+config.route.default_http_client = 'direct'
+config.route.default_domain_resolver = 'local'
+
+if (!Array.isArray(config.http_clients)) config.http_clients = []
+if (!config.http_clients.some(c => c?.tag === 'direct')) {
+  config.http_clients.unshift({ tag: 'direct' })
+}
+
 let proxies = url
   ? await produceArtifact({
       name,
@@ -64,8 +72,6 @@ let proxies = url
 
 const proxyTags = proxies.map(p => p.tag)
 if (proxyTags.length === 0) throw new Error('没有获取到代理节点')
-
-const DEFAULT_PROXY = proxyTags[0]
 
 // 注入 WG endpoint
 const wgEndpoint = {
@@ -140,13 +146,16 @@ if (!proxyGroup) {
     type: 'selector',
     tag: 'Proxy',
     outbounds: [],
-    default: DEFAULT_PROXY
+    default: proxyTags[0]
   }
   config.outbounds.unshift(proxyGroup)
 }
 
 proxyGroup.outbounds = [...proxyTags, 'direct']
-proxyGroup.default = DEFAULT_PROXY
+
+if (!proxyGroup.default || !proxyGroup.outbounds.includes(proxyGroup.default)) {
+  proxyGroup.default = proxyTags[0]
+}
 
 if (!config.outbounds.some(o => o?.tag === 'direct')) {
   config.outbounds.push({ type: 'direct', tag: 'direct' })
@@ -171,11 +180,12 @@ config.outbounds.forEach(o => {
   })
 })
 
-// DNS detour：不要走 Proxy selector，直接走默认节点
+// DNS detour：运行阶段走 Proxy selector，避免固定到第一个节点
+// 启动阶段 rule-set 下载由 route.default_http_client = direct 负责，不依赖 Proxy
 if (Array.isArray(config.dns?.servers)) {
   config.dns.servers = config.dns.servers.map(s => {
     if (s?.tag === 'google' || s?.tag === 'proxy-dns') {
-      return { ...s, detour: DEFAULT_PROXY }
+      return { ...s, detour: 'Proxy' }
     }
 
     if (s?.tag === 'home-dns') {
@@ -223,7 +233,7 @@ if (!hasHomeDnsRule) {
   })
 }
 
-// 清理 rule-set 旧字段
+// 清理 rule-set 旧字段，确保启动下载走 direct http_client + ghfast
 if (Array.isArray(config.route.rule_set)) {
   config.route.rule_set = config.route.rule_set.map(rs => {
     if (rs?.type === 'remote' && typeof rs.url === 'string') {
@@ -259,11 +269,11 @@ if (proxyGroup.outbounds.includes('wg-home')) {
 if (Array.isArray(config.dns?.servers)) {
   const badDns = config.dns.servers.find(s =>
     (s?.tag === 'google' || s?.tag === 'proxy-dns') &&
-    s?.detour === 'Proxy'
+    s?.detour !== 'Proxy'
   )
 
   if (badDns) {
-    throw new Error(`DNS 服务器 ${badDns.tag} 不应 detour 到 Proxy selector`)
+    throw new Error(`DNS 服务器 ${badDns.tag} 应 detour 到 Proxy selector，当前为 ${badDns.detour}`)
   }
 }
 
