@@ -87,6 +87,7 @@ const wgEndpoint = {
 }
 
 let wgReplaced = false
+
 config.endpoints = config.endpoints.map(e => {
   if (e?.tag === 'wg-home' || e?.tag === '__WG_HOME_PLACEHOLDER__') {
     wgReplaced = true
@@ -94,7 +95,10 @@ config.endpoints = config.endpoints.map(e => {
   }
   return e
 })
-if (!wgReplaced) config.endpoints.unshift(wgEndpoint)
+
+if (!wgReplaced) {
+  config.endpoints.unshift(wgEndpoint)
+}
 
 // 注入代理节点
 config.outbounds = config.outbounds.filter(o => {
@@ -103,6 +107,7 @@ config.outbounds = config.outbounds.filter(o => {
   if (o.tag === 'direct') return true
   return !proxyTags.includes(o.tag)
 })
+
 config.outbounds.push(...proxies)
 
 // 多分组注入
@@ -127,12 +132,19 @@ config.outbounds.forEach(o => {
   })
 })
 
-// Proxy 组
+// Proxy 组：只放机场节点 + direct，不放 wg-home
 let proxyGroup = config.outbounds.find(o => o?.tag === 'Proxy' && o?.type === 'selector')
+
 if (!proxyGroup) {
-  proxyGroup = { type: 'selector', tag: 'Proxy', outbounds: [], default: DEFAULT_PROXY }
+  proxyGroup = {
+    type: 'selector',
+    tag: 'Proxy',
+    outbounds: [],
+    default: DEFAULT_PROXY
+  }
   config.outbounds.unshift(proxyGroup)
 }
+
 proxyGroup.outbounds = [...proxyTags, 'direct']
 proxyGroup.default = DEFAULT_PROXY
 
@@ -159,10 +171,17 @@ config.outbounds.forEach(o => {
   })
 })
 
-// DNS detour 修复
+// DNS detour：不要走 Proxy selector，直接走默认节点
 if (Array.isArray(config.dns?.servers)) {
   config.dns.servers = config.dns.servers.map(s => {
-    if (s?.tag === 'proxy-dns') return { ...s, detour: DEFAULT_PROXY }
+    if (s?.tag === 'google' || s?.tag === 'proxy-dns') {
+      return { ...s, detour: DEFAULT_PROXY }
+    }
+
+    if (s?.tag === 'home-dns') {
+      return { ...s, detour: 'wg-home' }
+    }
+
     return s
   })
 }
@@ -186,14 +205,49 @@ if (!config.route.rules.some(r => r?.outbound === 'wg-home')) {
   })
 }
 
-// 清理 rule-set
+// DNS 内网解析规则：192.168.1.0/24 走 home-dns
+if (!config.dns) config.dns = {}
+if (!Array.isArray(config.dns.rules)) config.dns.rules = []
+
+const hasHomeDnsRule = config.dns.rules.some(r =>
+  Array.isArray(r?.ip_cidr) &&
+  r.ip_cidr.includes('192.168.1.0/24') &&
+  r.server === 'home-dns'
+)
+
+if (!hasHomeDnsRule) {
+  config.dns.rules.unshift({
+    ip_cidr: homeCIDRs,
+    action: 'route',
+    server: 'home-dns'
+  })
+}
+
+// 清理 rule-set 旧字段
 if (Array.isArray(config.route.rule_set)) {
   config.route.rule_set = config.route.rule_set.map(rs => {
+    if (rs?.type === 'remote' && typeof rs.url === 'string') {
+      rs.url = rs.url
+        .replace(
+          'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/',
+          'https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/'
+        )
+        .replace(
+          'https://testingcf.jsdelivr.net/gh/Toperlock/sing-box-geosite@main/',
+          'https://ghfast.top/raw.githubusercontent.com/Toperlock/sing-box-geosite/main/'
+        )
+        .replace(
+          'https://raw.githubusercontent.com/',
+          'https://ghfast.top/raw.githubusercontent.com/'
+        )
+    }
+
     delete rs.download_detour
     return rs
   })
 }
 
+// 基础校验
 if (!config.endpoints.some(e => e?.tag === 'wg-home' && e?.type === 'wireguard')) {
   throw new Error('最终配置缺少 wireguard endpoint: wg-home')
 }
@@ -202,14 +256,31 @@ if (proxyGroup.outbounds.includes('wg-home')) {
   throw new Error('Proxy 组不应包含 wg-home')
 }
 
+if (Array.isArray(config.dns?.servers)) {
+  const badDns = config.dns.servers.find(s =>
+    (s?.tag === 'google' || s?.tag === 'proxy-dns') &&
+    s?.detour === 'Proxy'
+  )
+
+  if (badDns) {
+    throw new Error(`DNS 服务器 ${badDns.tag} 不应 detour 到 Proxy selector`)
+  }
+}
+
 $content = JSON.stringify(config, null, 2)
 
 function createTagRegExp(tagPattern) {
-  return new RegExp(tagPattern.replace('ℹ️', ''), tagPattern.includes('ℹ️') ? 'i' : undefined)
+  return new RegExp(
+    tagPattern.replace('ℹ️', ''),
+    tagPattern.includes('ℹ️') ? 'i' : undefined
+  )
 }
 
 function createOutboundRegExp(outboundPattern) {
-  return new RegExp(outboundPattern.replace('ℹ️', ''), outboundPattern.includes('ℹ️') ? 'i' : undefined)
+  return new RegExp(
+    outboundPattern.replace('ℹ️', ''),
+    outboundPattern.includes('ℹ️') ? 'i' : undefined
+  )
 }
 
 console.log('✅ 完成 WG 多分组回家配置生成')
