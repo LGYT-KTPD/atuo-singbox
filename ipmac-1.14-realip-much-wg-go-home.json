@@ -21,7 +21,7 @@
         "tag": "google",
         "type": "tls",
         "server": "8.8.8.8",
-        "detour": "Proxy"
+        "detour": "__PROXY_NODE__"
       },
       {
         "tag": "home-dns",
