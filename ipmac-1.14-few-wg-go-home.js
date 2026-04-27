@@ -1,19 +1,12 @@
-// iPhone / Mac sing-box 1.14：WireGuard endpoint 回家 + 代理节点订阅注入
-// .env.wg 只负责 WG 信息，不负责 VLESS 节点
+// iPhone / Mac sing-box 1.14：WireGuard 回家 + 防 DNS 泄露版
 
-console.log('🚀 开始生成 WireGuard 回家配置')
+console.log('🚀 开始生成 WG 防泄露配置')
 
 let { type, name, includeUnsupportedProxy, url } = $arguments
 type = /^1$|col|组合/i.test(type) ? 'collection' : 'subscription'
 
 const parser = ProxyUtils.JSON5 || JSON
-let config
-
-try {
-  config = parser.parse($content ?? $files[0])
-} catch (e) {
-  throw new Error(`配置解析失败: ${e.message}`)
-}
+let config = parser.parse($content ?? $files[0])
 
 function env(name, fallback = undefined) {
   const v = process?.env?.[name]
@@ -24,24 +17,17 @@ function env(name, fallback = undefined) {
 function envNumber(name, fallback = undefined) {
   const raw = env(name, fallback === undefined ? undefined : String(fallback))
   const n = Number(raw)
-  if (!Number.isFinite(n)) {
-    throw new Error(`${name} 必须是数字，当前值=${raw}`)
-  }
+  if (!Number.isFinite(n)) throw new Error(`${name} 必须是数字，当前值=${raw}`)
   return n
 }
 
 function envList(name, fallback) {
-  return env(name, fallback)
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean)
+  return env(name, fallback).split(',').map(s => s.trim()).filter(Boolean)
 }
 
 function requireEnv(names) {
   const missing = names.filter(n => !env(n))
-  if (missing.length) {
-    throw new Error(`.env.wg 缺少变量：${missing.join(', ')}`)
-  }
+  if (missing.length) throw new Error(`.env 缺少变量：${missing.join(', ')}`)
 }
 
 requireEnv([
@@ -59,45 +45,35 @@ if (!Array.isArray(config.endpoints)) config.endpoints = []
 if (!Array.isArray(config.outbounds)) config.outbounds = []
 if (!config.route) config.route = {}
 
-// ① 获取代理节点：这里注入 “🇺🇸 US-VLESS-VPS”
-let proxies
+config.route.default_http_client = 'direct'
+config.route.default_domain_resolver = 'local'
 
-if (url) {
-  proxies = await produceArtifact({
-    name,
-    type,
-    platform: 'sing-box',
-    produceType: 'internal',
-    produceOpts: {
-      'include-unsupported-proxy': includeUnsupportedProxy,
-    },
-    subscription: {
-      name,
-      url,
-      source: 'remote',
-    },
-  })
-} else {
-  proxies = await produceArtifact({
-    name,
-    type,
-    platform: 'sing-box',
-    produceType: 'internal',
-    produceOpts: {
-      'include-unsupported-proxy': includeUnsupportedProxy,
-    },
-  })
+if (!Array.isArray(config.http_clients)) config.http_clients = []
+if (!config.http_clients.some(c => c?.tag === 'direct')) {
+  config.http_clients.unshift({ tag: 'direct' })
 }
+
+let proxies = url
+  ? await produceArtifact({
+      name,
+      type,
+      platform: 'sing-box',
+      produceType: 'internal',
+      produceOpts: { 'include-unsupported-proxy': includeUnsupportedProxy },
+      subscription: { name, url, source: 'remote' },
+    })
+  : await produceArtifact({
+      name,
+      type,
+      platform: 'sing-box',
+      produceType: 'internal',
+      produceOpts: { 'include-unsupported-proxy': includeUnsupportedProxy },
+    })
 
 const proxyTags = proxies.map(p => p.tag)
+if (proxyTags.length === 0) throw new Error('没有获取到代理节点')
 
-if (proxyTags.length === 0) {
-  throw new Error('没有获取到代理节点，无法生成 Proxy 组')
-}
-
-const DEFAULT_PROXY = proxyTags[0]
-
-// ② 注入 WireGuard endpoint
+// 注入 WireGuard endpoint
 const wgEndpoint = {
   type: 'wireguard',
   tag: 'wg-home',
@@ -117,7 +93,6 @@ const wgEndpoint = {
 }
 
 let wgReplaced = false
-
 config.endpoints = config.endpoints.map(e => {
   if (e?.tag === 'wg-home' || e?.tag === '__WG_HOME_PLACEHOLDER__') {
     wgReplaced = true
@@ -125,12 +100,9 @@ config.endpoints = config.endpoints.map(e => {
   }
   return e
 })
+if (!wgReplaced) config.endpoints.unshift(wgEndpoint)
 
-if (!wgReplaced) {
-  config.endpoints.unshift(wgEndpoint)
-}
-
-// ③ 注入代理节点到 outbounds
+// 注入代理节点
 config.outbounds = config.outbounds.filter(o => {
   if (!o?.tag) return true
   if (o.tag === 'Proxy') return true
@@ -140,66 +112,76 @@ config.outbounds = config.outbounds.filter(o => {
 
 config.outbounds.push(...proxies)
 
-// ④ 修复 Proxy selector
+// Proxy 组只放代理节点 + direct
 let proxyGroup = config.outbounds.find(o => o?.tag === 'Proxy' && o?.type === 'selector')
-
 if (!proxyGroup) {
   proxyGroup = {
     type: 'selector',
     tag: 'Proxy',
     outbounds: [],
-    default: DEFAULT_PROXY
+    default: proxyTags[0]
   }
   config.outbounds.unshift(proxyGroup)
 }
 
 proxyGroup.outbounds = [...proxyTags, 'direct']
-proxyGroup.default = DEFAULT_PROXY
+proxyGroup.default = proxyTags[0]
 
 if (!config.outbounds.some(o => o?.tag === 'direct')) {
-  config.outbounds.push({
-    type: 'direct',
-    tag: 'direct'
-  })
+  config.outbounds.push({ type: 'direct', tag: 'direct' })
 }
 
-// ⑤ DNS proxy-dns detour 跟随默认代理节点
-if (Array.isArray(config.dns?.servers)) {
-  config.dns.servers = config.dns.servers.map(s => {
-    if (s?.tag === 'proxy-dns') {
-      return {
-        ...s,
-        detour: DEFAULT_PROXY
-      }
-    }
-    return s
-  })
-}
+// DNS：防泄露策略
+// 内网 DNS 走家里 DNS；其他全部走代理 DNS
+if (!config.dns) config.dns = {}
 
-// ⑥ 修复 WG 回家路由
-if (!Array.isArray(config.route.rules)) config.route.rules = []
+config.dns.servers = [
+  {
+    tag: 'home-dns',
+    type: 'udp',
+    server: '192.168.1.118',
+    detour: 'wg-home'
+  },
+  {
+    tag: 'proxy-dns',
+    type: 'tls',
+    server: '8.8.8.8',
+    detour: 'Proxy'
+  }
+]
 
 const homeCIDRs = envList('WG_HOME_CIDRS', '192.168.1.0/24')
-const hasWgHomeRule = config.route.rules.some(r => r?.outbound === 'wg-home')
 
-if (!hasWgHomeRule) {
+config.dns.rules = [
+  {
+    ip_cidr: homeCIDRs,
+    action: 'route',
+    server: 'home-dns'
+  }
+]
+
+config.dns.final = 'proxy-dns'
+config.dns.strategy = 'ipv4_only'
+delete config.dns.reverse_mapping
+
+// WG 回家路由
+if (!Array.isArray(config.route.rules)) config.route.rules = []
+
+config.route.rules = config.route.rules.map(r => {
+  if (r?.outbound === 'wg-home') {
+    return { ...r, ip_cidr: homeCIDRs }
+  }
+  return r
+})
+
+if (!config.route.rules.some(r => r?.outbound === 'wg-home')) {
   config.route.rules.splice(3, 0, {
     ip_cidr: homeCIDRs,
     outbound: 'wg-home'
   })
-} else {
-  config.route.rules = config.route.rules.map(r => {
-    if (r?.outbound === 'wg-home') {
-      return {
-        ...r,
-        ip_cidr: homeCIDRs
-      }
-    }
-    return r
-  })
 }
 
-// ⑦ 清理 rule-set 旧字段
+// 清理 rule-set
 if (Array.isArray(config.route.rule_set)) {
   config.route.rule_set = config.route.rule_set.map(rs => {
     if (rs?.type === 'remote' && typeof rs.url === 'string') {
@@ -215,11 +197,11 @@ if (Array.isArray(config.route.rule_set)) {
     }
 
     delete rs.download_detour
+    delete rs.http_client
     return rs
   })
 }
 
-// ⑧ 校验
 if (!config.endpoints.some(e => e?.tag === 'wg-home' && e?.type === 'wireguard')) {
   throw new Error('最终配置缺少 wireguard endpoint: wg-home')
 }
@@ -230,4 +212,4 @@ if (proxyGroup.outbounds.includes('wg-home')) {
 
 $content = JSON.stringify(config, null, 2)
 
-console.log('✅ 完成 WireGuard 回家配置生成')
+console.log('✅ 完成 WG 防泄露配置生成')
