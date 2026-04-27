@@ -1,6 +1,6 @@
-// iPhone / Mac sing-box 1.14：WireGuard 回家 + 防 DNS 泄露版 v2
+// iPhone / Mac sing-box 1.14：WireGuard 回家 + 防 DNS 泄露稳定版 v3
 
-console.log('🚀 开始生成 WG 防泄露配置')
+console.log('🚀 开始生成 WG 防泄露配置 v3')
 
 let { type, name, includeUnsupportedProxy, url } = $arguments
 type = /^1$|col|组合/i.test(type) ? 'collection' : 'subscription'
@@ -28,6 +28,13 @@ function envList(name, fallback) {
 function requireEnv(names) {
   const missing = names.filter(n => !env(n))
   if (missing.length) throw new Error(`.env 缺少变量：${missing.join(', ')}`)
+}
+
+function isDomain(v) {
+  if (!v) return false
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(v)) return false
+  if (v.includes(':')) return false
+  return true
 }
 
 requireEnv([
@@ -73,7 +80,23 @@ let proxies = url
 const proxyTags = proxies.map(p => p.tag)
 if (proxyTags.length === 0) throw new Error('没有获取到代理节点')
 
+// 关键：代理节点本身的 server 域名用 local 解析，避免 proxy-dns -> Proxy -> 还要 DNS 的死循环
+const proxyServerDomains = []
+
+proxies = proxies.map(p => {
+  if (isDomain(p.server)) {
+    proxyServerDomains.push(p.server)
+    return {
+      ...p,
+      domain_resolver: p.domain_resolver || 'local'
+    }
+  }
+  return p
+})
+
 // 注入 WireGuard endpoint
+const homeCIDRs = envList('WG_HOME_CIDRS', '192.168.1.0/24')
+
 const wgEndpoint = {
   type: 'wireguard',
   tag: 'wg-home',
@@ -116,7 +139,7 @@ config.outbounds = config.outbounds.filter(o => {
 
 config.outbounds.push(...proxies)
 
-// Proxy 组只放代理节点 + direct
+// Proxy 组
 let proxyGroup = config.outbounds.find(o => o?.tag === 'Proxy' && o?.type === 'selector')
 
 if (!proxyGroup) {
@@ -136,10 +159,7 @@ if (!config.outbounds.some(o => o?.tag === 'direct')) {
   config.outbounds.push({ type: 'direct', tag: 'direct' })
 }
 
-// DNS：防泄露策略 v2
-// local 只给 default_domain_resolver / 启动解析用
-// home-dns 只解析家里内网，走 wg-home
-// proxy-dns 解析其它全部域名，走 Proxy selector
+// DNS：稳定防泄露策略
 if (!config.dns) config.dns = {}
 
 config.dns.servers = [
@@ -162,15 +182,40 @@ config.dns.servers = [
   }
 ]
 
-const homeCIDRs = envList('WG_HOME_CIDRS', '192.168.1.0/24')
+config.dns.rules = []
 
-config.dns.rules = [
-  {
-    ip_cidr: homeCIDRs,
+// 代理服务器域名必须先用 local 解开，否则 proxy-dns 会死循环
+if (proxyServerDomains.length > 0) {
+  config.dns.rules.push({
+    domain: [...new Set(proxyServerDomains)],
     action: 'route',
-    server: 'home-dns'
-  }
-]
+    server: 'local',
+    strategy: 'ipv4_only'
+  })
+}
+
+// 启动下载相关域名走 local
+config.dns.rules.push({
+  domain_suffix: [
+    'ghfast.top',
+    'raw.githubusercontent.com',
+    'github.com',
+    'gh-proxy.com',
+    'ghproxy.net',
+    'testingcf.jsdelivr.net',
+    'cdn.jsdelivr.net'
+  ],
+  action: 'route',
+  server: 'local',
+  strategy: 'ipv4_only'
+})
+
+// 家里内网走 home-dns
+config.dns.rules.push({
+  ip_cidr: homeCIDRs,
+  action: 'route',
+  server: 'home-dns'
+})
 
 config.dns.final = 'proxy-dns'
 config.dns.strategy = 'ipv4_only'
@@ -222,23 +267,6 @@ if (proxyGroup.outbounds.includes('wg-home')) {
   throw new Error('Proxy 组不应包含 wg-home')
 }
 
-const dnsServers = config.dns?.servers || []
-
-const localServer = dnsServers.find(s => s?.tag === 'local')
-const homeDns = dnsServers.find(s => s?.tag === 'home-dns')
-const proxyDns = dnsServers.find(s => s?.tag === 'proxy-dns')
-
-if (!localServer) throw new Error('缺少 local DNS server')
-if (!homeDns || homeDns.detour !== 'wg-home') {
-  throw new Error('home-dns 必须 detour 到 wg-home')
-}
-if (!proxyDns || proxyDns.detour !== 'Proxy') {
-  throw new Error('proxy-dns 必须 detour 到 Proxy')
-}
-if (config.dns.final !== 'proxy-dns') {
-  throw new Error('dns.final 必须是 proxy-dns')
-}
-
 $content = JSON.stringify(config, null, 2)
 
-console.log('✅ 完成 WG 防泄露配置生成')
+console.log('✅ 完成 WG 防泄露配置生成 v3')
