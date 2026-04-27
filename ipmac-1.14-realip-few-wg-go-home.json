@@ -16,6 +16,11 @@
   "dns": {
     "servers": [
       {
+        "tag": "local",
+        "type": "udp",
+        "server": "223.5.5.5"
+      },
+      {
         "tag": "home-dns",
         "type": "udp",
         "server": "192.168.1.118",
