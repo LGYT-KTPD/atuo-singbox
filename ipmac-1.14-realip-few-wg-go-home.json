@@ -16,7 +16,7 @@
   "dns": {
     "servers": [
       {
-        "tag": "local",
+        "tag": "local-dns",
         "type": "udp",
         "server": "223.5.5.5"
       },
@@ -40,6 +40,26 @@
         ],
         "action": "route",
         "server": "home-dns"
+      },
+      {
+        "clash_mode": "direct",
+        "action": "route",
+        "server": "local-dns"
+      },
+      {
+        "clash_mode": "global",
+        "action": "route",
+        "server": "proxy-dns"
+      },
+      {
+        "rule_set": "geosite-cn",
+        "action": "route",
+        "server": "local-dns"
+      },
+      {
+        "rule_set": "geosite-geolocation-!cn",
+        "action": "route",
+        "server": "proxy-dns"
       }
     ],
     "final": "proxy-dns",
@@ -167,33 +187,30 @@
         "tag": "geosite-category-ads-all",
         "type": "remote",
         "format": "binary",
-        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ads-all.srs"
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ads-all.srs",
+        "http_client": {}
       },
       {
         "tag": "geosite-geolocation-!cn",
         "type": "remote",
         "format": "binary",
-        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-!cn.srs"
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-!cn.srs",
+        "http_client": {}
       },
       {
         "tag": "geoip-cn",
         "type": "remote",
         "format": "binary",
-        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/cn.srs"
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/cn.srs",
+        "http_client": {}
       },
       {
         "tag": "geosite-cn",
         "type": "remote",
         "format": "binary",
-        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs"
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs",
+        "http_client": {}
       }
-    ],
-    "default_http_client": "direct",
-    "default_domain_resolver": "local"
-  },
-  "http_clients": [
-    {
-      "tag": "direct"
-    }
-  ]
+    ]
+  }
 }
