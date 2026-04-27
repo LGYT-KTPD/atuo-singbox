@@ -1,4 +1,4 @@
-// iPhone / Mac sing-box 1.14：WireGuard 回家 + 防 DNS 泄露版
+// iPhone / Mac sing-box 1.14：WireGuard 回家 + 防 DNS 泄露版 v2
 
 console.log('🚀 开始生成 WG 防泄露配置')
 
@@ -93,6 +93,7 @@ const wgEndpoint = {
 }
 
 let wgReplaced = false
+
 config.endpoints = config.endpoints.map(e => {
   if (e?.tag === 'wg-home' || e?.tag === '__WG_HOME_PLACEHOLDER__') {
     wgReplaced = true
@@ -100,7 +101,10 @@ config.endpoints = config.endpoints.map(e => {
   }
   return e
 })
-if (!wgReplaced) config.endpoints.unshift(wgEndpoint)
+
+if (!wgReplaced) {
+  config.endpoints.unshift(wgEndpoint)
+}
 
 // 注入代理节点
 config.outbounds = config.outbounds.filter(o => {
@@ -114,6 +118,7 @@ config.outbounds.push(...proxies)
 
 // Proxy 组只放代理节点 + direct
 let proxyGroup = config.outbounds.find(o => o?.tag === 'Proxy' && o?.type === 'selector')
+
 if (!proxyGroup) {
   proxyGroup = {
     type: 'selector',
@@ -131,11 +136,18 @@ if (!config.outbounds.some(o => o?.tag === 'direct')) {
   config.outbounds.push({ type: 'direct', tag: 'direct' })
 }
 
-// DNS：防泄露策略
-// 内网 DNS 走家里 DNS；其他全部走代理 DNS
+// DNS：防泄露策略 v2
+// local 只给 default_domain_resolver / 启动解析用
+// home-dns 只解析家里内网，走 wg-home
+// proxy-dns 解析其它全部域名，走 Proxy selector
 if (!config.dns) config.dns = {}
 
 config.dns.servers = [
+  {
+    tag: 'local',
+    type: 'udp',
+    server: '223.5.5.5'
+  },
   {
     tag: 'home-dns',
     type: 'udp',
@@ -208,6 +220,23 @@ if (!config.endpoints.some(e => e?.tag === 'wg-home' && e?.type === 'wireguard')
 
 if (proxyGroup.outbounds.includes('wg-home')) {
   throw new Error('Proxy 组不应包含 wg-home')
+}
+
+const dnsServers = config.dns?.servers || []
+
+const localServer = dnsServers.find(s => s?.tag === 'local')
+const homeDns = dnsServers.find(s => s?.tag === 'home-dns')
+const proxyDns = dnsServers.find(s => s?.tag === 'proxy-dns')
+
+if (!localServer) throw new Error('缺少 local DNS server')
+if (!homeDns || homeDns.detour !== 'wg-home') {
+  throw new Error('home-dns 必须 detour 到 wg-home')
+}
+if (!proxyDns || proxyDns.detour !== 'Proxy') {
+  throw new Error('proxy-dns 必须 detour 到 Proxy')
+}
+if (config.dns.final !== 'proxy-dns') {
+  throw new Error('dns.final 必须是 proxy-dns')
 }
 
 $content = JSON.stringify(config, null, 2)
