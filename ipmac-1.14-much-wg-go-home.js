@@ -1,4 +1,4 @@
-// iPhone / Mac sing-box 1.14：WireGuard endpoint 回家 + 机场多分组节点注入
+// iPhone / Mac sing-box 1.14-alpha.21：WireGuard endpoint 回家 + 机场多分组节点注入（增强稳定版）
 
 console.log('🚀 开始生成 WG 多分组回家配置')
 
@@ -30,6 +30,20 @@ function requireEnv(names) {
   if (missing.length) throw new Error(`.env 缺少变量：${missing.join(', ')}`)
 }
 
+function createTagRegExp(tagPattern) {
+  return new RegExp(
+    tagPattern.replace('ℹ️', ''),
+    tagPattern.includes('ℹ️') ? 'i' : undefined
+  )
+}
+
+function createOutboundRegExp(outboundPattern) {
+  return new RegExp(
+    outboundPattern.replace('ℹ️', ''),
+    outboundPattern.includes('ℹ️') ? 'i' : undefined
+  )
+}
+
 requireEnv([
   'WG_PRIVATE_KEY',
   'WG_PEER_ADDRESS',
@@ -41,18 +55,115 @@ if (config.experimental?.clash_api?.external_ui_http_client) {
   delete config.experimental.clash_api.external_ui_http_client
 }
 
+if (!config.dns) config.dns = {}
+if (!config.route) config.route = {}
 if (!Array.isArray(config.endpoints)) config.endpoints = []
 if (!Array.isArray(config.outbounds)) config.outbounds = []
-if (!config.route) config.route = {}
+if (!Array.isArray(config.http_clients)) config.http_clients = []
+
+// alpha.21 基础增强
+config.dns.timeout = '3s'
+config.dns.strategy = 'ipv4_only'
+
+config.http_clients = config.http_clients.filter(c => c?.tag !== 'direct')
+config.http_clients.unshift({ tag: 'direct' })
 
 config.route.default_http_client = 'direct'
-config.route.default_domain_resolver = 'local'
+config.route.default_domain_resolver = 'local-dns'
 
-if (!Array.isArray(config.http_clients)) config.http_clients = []
-if (!config.http_clients.some(c => c?.tag === 'direct')) {
-  config.http_clients.unshift({ tag: 'direct' })
+// tun-in 使用 alpha.21 dns_mode / dns_address
+if (Array.isArray(config.inbounds)) {
+  config.inbounds = config.inbounds.map(i => {
+    if (i?.type === 'tun' && i?.tag === 'tun-in') {
+      return {
+        ...i,
+        dns_mode: 'hijack',
+        dns_address: '172.19.0.2'
+      }
+    }
+    return i
+  })
 }
 
+// DNS servers 修正
+if (Array.isArray(config.dns.servers)) {
+  config.dns.servers = config.dns.servers.map(s => {
+    if (s?.tag === 'local') {
+      return { ...s, tag: 'local-dns' }
+    }
+
+    if (s?.tag === 'google' || s?.tag === 'proxy-dns') {
+      return { ...s, detour: 'Proxy' }
+    }
+
+    if (s?.tag === 'home-dns') {
+      return { ...s, detour: 'wg-home' }
+    }
+
+    if (s?.tag === 'public' && s?.domain_resolver === 'local') {
+      return { ...s, domain_resolver: 'local-dns' }
+    }
+
+    return s
+  })
+}
+
+// DNS rules 修正
+if (!Array.isArray(config.dns.rules)) config.dns.rules = []
+
+// 新版 1.14：dns.rules 里的 ip_cidr 是响应匹配字段，没有 match_response=true 会报错
+config.dns.rules = config.dns.rules.filter(r => {
+  if (r?.ip_cidr && !r?.match_response) return false
+  return true
+})
+
+// server: local 统一改 local-dns
+config.dns.rules = config.dns.rules.map(r => {
+  if (r?.server === 'local') {
+    return { ...r, server: 'local-dns' }
+  }
+  return r
+})
+
+// 内网域名走 home-dns
+const hasHomeDomainRule = config.dns.rules.some(r =>
+  Array.isArray(r?.domain_suffix) &&
+  r.domain_suffix.includes('ktpd.fun') &&
+  r.server === 'home-dns'
+)
+
+if (!hasHomeDomainRule) {
+  config.dns.rules.unshift({
+    domain_suffix: [
+      'ktpd.fun',
+      'xwcac68u.top'
+    ],
+    action: 'route',
+    server: 'home-dns'
+  })
+}
+
+// 减少 iOS/macOS HTTPS/SVCB/PTR 查询噪音
+const hasRejectQtypeRule = config.dns.rules.some(r =>
+  Array.isArray(r?.query_type) &&
+  r.query_type.includes('SVCB') &&
+  r.query_type.includes('HTTPS') &&
+  r.query_type.includes('PTR') &&
+  r.action === 'reject'
+)
+
+if (!hasRejectQtypeRule) {
+  config.dns.rules.splice(1, 0, {
+    query_type: [
+      'SVCB',
+      'HTTPS',
+      'PTR'
+    ],
+    action: 'reject'
+  })
+}
+
+// 获取代理节点
 let proxies = url
   ? await produceArtifact({
       name,
@@ -117,7 +228,7 @@ config.outbounds = config.outbounds.filter(o => {
 config.outbounds.push(...proxies)
 
 // 多分组注入
-const outboundRules = outbound
+const outboundRules = (outbound || '')
   .split('🕳')
   .filter(Boolean)
   .map(i => {
@@ -151,7 +262,10 @@ if (!proxyGroup) {
   config.outbounds.unshift(proxyGroup)
 }
 
-proxyGroup.outbounds = [...proxyTags, 'direct']
+proxyGroup.outbounds = [
+  ...proxyTags,
+  'direct'
+]
 
 if (!proxyGroup.default || !proxyGroup.outbounds.includes(proxyGroup.default)) {
   proxyGroup.default = proxyTags[0]
@@ -180,22 +294,6 @@ config.outbounds.forEach(o => {
   })
 })
 
-// DNS detour：运行阶段走 Proxy selector，避免固定到第一个节点
-// 启动阶段 rule-set 下载由 route.default_http_client = direct 负责，不依赖 Proxy
-if (Array.isArray(config.dns?.servers)) {
-  config.dns.servers = config.dns.servers.map(s => {
-    if (s?.tag === 'google' || s?.tag === 'proxy-dns') {
-      return { ...s, detour: 'Proxy' }
-    }
-
-    if (s?.tag === 'home-dns') {
-      return { ...s, detour: 'wg-home' }
-    }
-
-    return s
-  })
-}
-
 // WG 回家路由
 if (!Array.isArray(config.route.rules)) config.route.rules = []
 
@@ -215,25 +313,7 @@ if (!config.route.rules.some(r => r?.outbound === 'wg-home')) {
   })
 }
 
-// DNS 内网解析规则：192.168.1.0/24 走 home-dns
-if (!config.dns) config.dns = {}
-if (!Array.isArray(config.dns.rules)) config.dns.rules = []
-
-const hasHomeDnsRule = config.dns.rules.some(r =>
-  Array.isArray(r?.ip_cidr) &&
-  r.ip_cidr.includes('192.168.1.0/24') &&
-  r.server === 'home-dns'
-)
-
-if (!hasHomeDnsRule) {
-  config.dns.rules.unshift({
-    ip_cidr: homeCIDRs,
-    action: 'route',
-    server: 'home-dns'
-  })
-}
-
-// 清理 rule-set 旧字段，确保启动下载走 direct http_client + ghfast
+// rule-set 修正
 if (Array.isArray(config.route.rule_set)) {
   config.route.rule_set = config.route.rule_set.map(rs => {
     if (rs?.type === 'remote' && typeof rs.url === 'string') {
@@ -253,6 +333,7 @@ if (Array.isArray(config.route.rule_set)) {
     }
 
     delete rs.download_detour
+    delete rs.http_client
     return rs
   })
 }
@@ -266,31 +347,21 @@ if (proxyGroup.outbounds.includes('wg-home')) {
   throw new Error('Proxy 组不应包含 wg-home')
 }
 
-if (Array.isArray(config.dns?.servers)) {
-  const badDns = config.dns.servers.find(s =>
-    (s?.tag === 'google' || s?.tag === 'proxy-dns') &&
-    s?.detour !== 'Proxy'
-  )
+const proxyDns = config.dns?.servers?.find(s => s?.tag === 'google' || s?.tag === 'proxy-dns')
+if (proxyDns && proxyDns.detour !== 'Proxy') {
+  throw new Error(`DNS 服务器 ${proxyDns.tag} 必须 detour 到 Proxy`)
+}
 
-  if (badDns) {
-    throw new Error(`DNS 服务器 ${badDns.tag} 应 detour 到 Proxy selector，当前为 ${badDns.detour}`)
-  }
+const homeDns = config.dns?.servers?.find(s => s?.tag === 'home-dns')
+if (homeDns && homeDns.detour !== 'wg-home') {
+  throw new Error('home-dns 必须 detour 到 wg-home')
+}
+
+const localDns = config.dns?.servers?.find(s => s?.tag === 'local-dns')
+if (!localDns) {
+  throw new Error('缺少 local-dns，route.default_domain_resolver 会失效')
 }
 
 $content = JSON.stringify(config, null, 2)
 
-function createTagRegExp(tagPattern) {
-  return new RegExp(
-    tagPattern.replace('ℹ️', ''),
-    tagPattern.includes('ℹ️') ? 'i' : undefined
-  )
-}
-
-function createOutboundRegExp(outboundPattern) {
-  return new RegExp(
-    outboundPattern.replace('ℹ️', ''),
-    outboundPattern.includes('ℹ️') ? 'i' : undefined
-  )
-}
-
-console.log('✅ 完成 WG 多分组回家配置生成')
+console.log('✅ 完成 WG 多分组回家配置生成（alpha.21 增强稳定版）')
