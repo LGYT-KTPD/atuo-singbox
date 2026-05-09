@@ -111,6 +111,15 @@ if (Array.isArray(config.dns.servers)) {
 // DNS rules 修正
 if (!Array.isArray(config.dns.rules)) config.dns.rules = []
 
+// 删除 DNS rules 里废弃的单条 strategy
+config.dns.rules = config.dns.rules.map(r => {
+  if (r?.strategy) {
+    const { strategy, ...rest } = r
+    return rest
+  }
+  return r
+})
+
 // 新版 1.14：dns.rules 里的 ip_cidr 是响应匹配字段，没有 match_response=true 会报错
 config.dns.rules = config.dns.rules.filter(r => {
   if (r?.ip_cidr && !r?.match_response) return false
