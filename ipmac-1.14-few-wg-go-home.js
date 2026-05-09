@@ -23,11 +23,9 @@ function env(name, fallback = undefined) {
 function envNumber(name, fallback = undefined) {
   const raw = env(name, fallback === undefined ? undefined : String(fallback))
   const n = Number(raw)
-
   if (!Number.isFinite(n)) {
     throw new Error(`${name} 必须是数字，当前值=${raw}`)
   }
-
   return n
 }
 
@@ -40,7 +38,6 @@ function envList(name, fallback) {
 
 function requireEnv(names) {
   const missing = names.filter(n => !env(n))
-
   if (missing.length) {
     throw new Error(`.env 缺少变量：${missing.join(', ')}`)
   }
@@ -59,15 +56,11 @@ if (config.experimental?.clash_api?.external_ui_http_client) {
 
 if (!config.route) config.route = {}
 if (!config.dns) config.dns = {}
-
 if (!Array.isArray(config.endpoints)) config.endpoints = []
 if (!Array.isArray(config.outbounds)) config.outbounds = []
 if (!Array.isArray(config.http_clients)) config.http_clients = []
 
-// =========================
 // alpha.21 DNS 增强
-// =========================
-
 config.dns.timeout = '3s'
 config.dns.strategy = 'ipv4_only'
 
@@ -90,16 +83,13 @@ if (Array.isArray(config.inbounds)) {
         dns_address: '172.19.0.2'
       }
     }
-
     return i
   })
 }
 
 // DNS servers 修正
-if (Array.isArray(config.dns?.servers)) {
+if (Array.isArray(config.dns.servers)) {
   config.dns.servers = config.dns.servers.map(s => {
-
-    // proxy-dns 永远走 Proxy 组
     if (s?.tag === 'proxy-dns') {
       return {
         ...s,
@@ -107,7 +97,6 @@ if (Array.isArray(config.dns?.servers)) {
       }
     }
 
-    // home-dns 永远走 wg-home
     if (s?.tag === 'home-dns') {
       return {
         ...s,
@@ -120,11 +109,13 @@ if (Array.isArray(config.dns?.servers)) {
 }
 
 // DNS rules 增强：减少 HTTPS/SVCB/PTR 噪音
-if (Array.isArray(config.dns?.rules)) {
-
+if (Array.isArray(config.dns.rules)) {
   const hasRejectRule = config.dns.rules.some(r =>
-    JSON.stringify(r?.query_type || []) ===
-    JSON.stringify(['SVCB', 'HTTPS', 'PTR'])
+    Array.isArray(r?.query_type) &&
+    r.query_type.includes('SVCB') &&
+    r.query_type.includes('HTTPS') &&
+    r.query_type.includes('PTR') &&
+    r.action === 'reject'
   )
 
   if (!hasRejectRule) {
@@ -139,14 +130,10 @@ if (Array.isArray(config.dns?.rules)) {
   }
 }
 
-// =========================
 // 获取代理节点
-// =========================
-
 let proxies
 
 if (url) {
-
   proxies = await produceArtifact({
     name,
     type,
@@ -161,9 +148,7 @@ if (url) {
       source: 'remote',
     },
   })
-
 } else {
-
   proxies = await produceArtifact({
     name,
     type,
@@ -173,7 +158,6 @@ if (url) {
       'include-unsupported-proxy': includeUnsupportedProxy,
     },
   })
-
 }
 
 const proxyTags = proxies.map(p => p.tag)
@@ -182,10 +166,7 @@ if (proxyTags.length === 0) {
   throw new Error('没有获取到代理节点，无法生成 Proxy 组')
 }
 
-// =========================
 // 注入 WireGuard
-// =========================
-
 const wgEndpoint = {
   type: 'wireguard',
   tag: 'wg-home',
@@ -193,22 +174,13 @@ const wgEndpoint = {
   address: envList('WG_ADDRESS', '10.14.0.6/32'),
   private_key: env('WG_PRIVATE_KEY'),
   mtu: envNumber('WG_MTU', 1420),
-
   peers: [
     {
       address: env('WG_PEER_ADDRESS'),
       port: envNumber('WG_PEER_PORT'),
       public_key: env('WG_PEER_PUBLIC_KEY'),
-
-      allowed_ips: envList(
-        'WG_ALLOWED_IPS',
-        '192.168.1.0/24'
-      ),
-
-      persistent_keepalive_interval: envNumber(
-        'WG_KEEPALIVE',
-        25
-      )
+      allowed_ips: envList('WG_ALLOWED_IPS', '192.168.1.0/24'),
+      persistent_keepalive_interval: envNumber('WG_KEEPALIVE', 25)
     }
   ]
 }
@@ -216,16 +188,10 @@ const wgEndpoint = {
 let wgReplaced = false
 
 config.endpoints = config.endpoints.map(e => {
-
-  if (
-    e?.tag === 'wg-home' ||
-    e?.tag === '__WG_HOME_PLACEHOLDER__'
-  ) {
-
+  if (e?.tag === 'wg-home' || e?.tag === '__WG_HOME_PLACEHOLDER__') {
     wgReplaced = true
     return wgEndpoint
   }
-
   return e
 })
 
@@ -233,41 +199,28 @@ if (!wgReplaced) {
   config.endpoints.unshift(wgEndpoint)
 }
 
-// =========================
 // 注入代理节点
-// =========================
-
 config.outbounds = config.outbounds.filter(o => {
-
   if (!o?.tag) return true
-
   if (o.tag === 'Proxy') return true
   if (o.tag === 'direct') return true
-
   return !proxyTags.includes(o.tag)
 })
 
 config.outbounds.push(...proxies)
 
-// =========================
 // 修复 Proxy 组
-// =========================
-
 let proxyGroup = config.outbounds.find(
-  o =>
-    o?.tag === 'Proxy' &&
-    o?.type === 'selector'
+  o => o?.tag === 'Proxy' && o?.type === 'selector'
 )
 
 if (!proxyGroup) {
-
   proxyGroup = {
     type: 'selector',
     tag: 'Proxy',
     outbounds: [],
     default: proxyTags[0]
   }
-
   config.outbounds.unshift(proxyGroup)
 }
 
@@ -280,24 +233,80 @@ proxyGroup.default = proxyTags[0]
 
 // 确保 direct 存在
 if (!config.outbounds.some(o => o?.tag === 'direct')) {
-
   config.outbounds.push({
     type: 'direct',
     tag: 'direct'
   })
 }
 
-// =========================
 // WG 路由
-// =========================
-
 if (!Array.isArray(config.route.rules)) {
   config.route.rules = []
 }
 
-const homeCIDRs = envList(
-  'WG_HOME_CIDRS',
-  '192.168.1.0/24'
+const homeCIDRs = envList('WG_HOME_CIDRS', '192.168.1.0/24')
+
+const hasWgHomeRule = config.route.rules.some(
+  r => r?.outbound === 'wg-home'
 )
 
-const has
+if (!hasWgHomeRule) {
+  config.route.rules.splice(3, 0, {
+    ip_cidr: homeCIDRs,
+    outbound: 'wg-home'
+  })
+} else {
+  config.route.rules = config.route.rules.map(r => {
+    if (r?.outbound === 'wg-home') {
+      return {
+        ...r,
+        ip_cidr: homeCIDRs
+      }
+    }
+    return r
+  })
+}
+
+// rule-set 修正
+if (Array.isArray(config.route.rule_set)) {
+  config.route.rule_set = config.route.rule_set.map(rs => {
+    if (rs?.type === 'remote' && typeof rs.url === 'string') {
+      rs.url = rs.url
+        .replace(
+          'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/',
+          'https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/'
+        )
+        .replace(
+          'https://raw.githubusercontent.com/',
+          'https://ghfast.top/raw.githubusercontent.com/'
+        )
+    }
+
+    delete rs.download_detour
+    delete rs.http_client
+    return rs
+  })
+}
+
+// 校验
+if (!config.endpoints.some(e => e?.tag === 'wg-home' && e?.type === 'wireguard')) {
+  throw new Error('最终配置缺少 wireguard endpoint: wg-home')
+}
+
+if (proxyGroup.outbounds.includes('wg-home')) {
+  throw new Error('Proxy 组不应包含 wg-home')
+}
+
+const proxyDns = config.dns?.servers?.find(s => s?.tag === 'proxy-dns')
+if (proxyDns && proxyDns.detour !== 'Proxy') {
+  throw new Error('proxy-dns 必须 detour 到 Proxy')
+}
+
+const homeDns = config.dns?.servers?.find(s => s?.tag === 'home-dns')
+if (homeDns && homeDns.detour !== 'wg-home') {
+  throw new Error('home-dns 必须 detour 到 wg-home')
+}
+
+$content = JSON.stringify(config, null, 2)
+
+console.log('✅ 完成 WireGuard 回家配置生成（alpha.21 增强稳定版）')
