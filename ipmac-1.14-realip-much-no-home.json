@@ -24,7 +24,7 @@
         "detour": "Proxy"
       },
       {
-        "tag": "local",
+        "tag": "local-dns",
         "type": "udp",
         "server": "223.5.5.5"
       },
@@ -32,14 +32,22 @@
         "tag": "public",
         "type": "https",
         "server": "dns.alidns.com",
-        "domain_resolver": "local"
+        "domain_resolver": "local-dns"
       }
     ],
     "rules": [
       {
+        "query_type": [
+          "SVCB",
+          "HTTPS",
+          "PTR"
+        ],
+        "action": "reject"
+      },
+      {
         "clash_mode": "direct",
         "action": "route",
-        "server": "local"
+        "server": "local-dns"
       },
       {
         "clash_mode": "global",
@@ -57,8 +65,7 @@
           "cdn.jsdelivr.net"
         ],
         "action": "route",
-        "server": "local",
-        "strategy": "ipv4_only"
+        "server": "local-dns"
       },
       {
         "domain_suffix": [
@@ -75,13 +82,12 @@
           "mmbiz.qlogo.cn"
         ],
         "action": "route",
-        "server": "local",
-        "strategy": "ipv4_only"
+        "server": "local-dns"
       },
       {
         "rule_set": "geosite-cn",
         "action": "route",
-        "server": "local"
+        "server": "local-dns"
       },
       {
         "rule_set": "geosite-geolocation-!cn",
@@ -91,7 +97,8 @@
     ],
     "reverse_mapping": false,
     "strategy": "ipv4_only",
-    "final": "google"
+    "final": "google",
+    "timeout": "3s"
   },
   "inbounds": [
     {
@@ -110,7 +117,9 @@
           "server": "127.0.0.1",
           "server_port": 7890
         }
-      }
+      },
+      "dns_mode": "hijack",
+      "dns_address": "172.19.0.2"
     },
     {
       "tag": "mixed-in",
@@ -395,7 +404,7 @@
     }
   ],
   "route": {
-    "default_domain_resolver": "local",
+    "default_domain_resolver": "local-dns",
     "auto_detect_interface": true,
     "final": "Proxy",
     "rules": [
