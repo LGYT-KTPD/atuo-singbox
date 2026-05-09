@@ -108,26 +108,55 @@ if (Array.isArray(config.dns.servers)) {
   })
 }
 
-// DNS rules 增强：减少 HTTPS/SVCB/PTR 噪音
-if (Array.isArray(config.dns.rules)) {
-  const hasRejectRule = config.dns.rules.some(r =>
-    Array.isArray(r?.query_type) &&
-    r.query_type.includes('SVCB') &&
-    r.query_type.includes('HTTPS') &&
-    r.query_type.includes('PTR') &&
-    r.action === 'reject'
-  )
+// DNS rules 修正
+if (!Array.isArray(config.dns.rules)) {
+  config.dns.rules = []
+}
 
-  if (!hasRejectRule) {
-    config.dns.rules.splice(1, 0, {
-      query_type: [
-        'SVCB',
-        'HTTPS',
-        'PTR'
-      ],
-      action: 'reject'
-    })
-  }
+// 删除新版 1.14 不允许的 DNS 请求侧 ip_cidr 规则
+// dns.rules 里的 ip_cidr 属于响应匹配字段，必须 match_response=true；
+// 这里原本想让内网走 home-dns，应改成按域名后缀走 home-dns。
+config.dns.rules = config.dns.rules.filter(r => {
+  if (r?.ip_cidr && !r?.match_response) return false
+  return true
+})
+
+// 内网域名走 home-dns
+const hasHomeDomainRule = config.dns.rules.some(r =>
+  Array.isArray(r?.domain_suffix) &&
+  r.domain_suffix.includes('ktpd.fun') &&
+  r.server === 'home-dns'
+)
+
+if (!hasHomeDomainRule) {
+  config.dns.rules.unshift({
+    domain_suffix: [
+      'ktpd.fun',
+      'xwcac68u.top'
+    ],
+    action: 'route',
+    server: 'home-dns'
+  })
+}
+
+// DNS rules 增强：减少 HTTPS/SVCB/PTR 噪音
+const hasRejectRule = config.dns.rules.some(r =>
+  Array.isArray(r?.query_type) &&
+  r.query_type.includes('SVCB') &&
+  r.query_type.includes('HTTPS') &&
+  r.query_type.includes('PTR') &&
+  r.action === 'reject'
+)
+
+if (!hasRejectRule) {
+  config.dns.rules.splice(1, 0, {
+    query_type: [
+      'SVCB',
+      'HTTPS',
+      'PTR'
+    ],
+    action: 'reject'
+  })
 }
 
 // 获取代理节点
