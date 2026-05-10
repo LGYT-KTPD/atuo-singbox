@@ -53,7 +53,8 @@
           "github.com",
           "gh-proxy.com",
           "testingcf.jsdelivr.net",
-          "cdn.jsdelivr.net"
+          "cdn.jsdelivr.net",
+          "ghproxy.net"
         ],
         "action": "route",
         "server": "local",
