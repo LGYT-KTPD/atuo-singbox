@@ -135,8 +135,7 @@
       "outbounds": [
         "__PROXY_PLACEHOLDER__",
         "direct"
-      ],
-      "default": "__PROXY_PLACEHOLDER__"
+      ]
     },
     {
       "tag": "OpenAI",
@@ -147,8 +146,7 @@
         "Japan",
         "America",
         "Others"
-      ],
-      "default": "America"
+      ]
     },
     {
       "tag": "Google",
@@ -225,8 +223,7 @@
         "Japan",
         "America",
         "Others"
-      ],
-      "default": "America"
+      ]
     },
     {
       "tag": "TikTok",
@@ -237,8 +234,7 @@
         "Singapore",
         "Japan",
         "America"
-      ],
-      "default": "Japan"
+      ]
     },
     {
       "tag": "Netflix",
