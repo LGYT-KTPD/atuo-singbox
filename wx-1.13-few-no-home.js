@@ -1,8 +1,8 @@
-// Windows 1.13.11 专用：自建节点少节点 no-home
-// 不使用 http_clients / default_http_client
-// 保留 download_detour: direct
+// Windows sing-box 1.13.11 专用：自建节点少节点 no-home
+// 注意：1.13.11 不使用 http_clients / route.default_http_client
+// 规则下载继续使用 download_detour: direct
 
-log(`🚀 开始`)
+log('🚀 开始')
 
 let { type, name, includeUnsupportedProxy, url } = $arguments
 type = /^1$|col|组合/i.test(type) ? 'collection' : 'subscription'
@@ -20,30 +20,60 @@ if (config.experimental?.clash_api?.external_ui_http_client) {
   delete config.experimental.clash_api.external_ui_http_client
 }
 
+// 1.13.11 不使用 http_clients
 delete config.http_clients
 
 if (!config.route) config.route = {}
 config.route.default_domain_resolver = 'local'
 delete config.route.default_http_client
 
+if (!config.dns) config.dns = {}
+if (!Array.isArray(config.dns.rules)) config.dns.rules = []
+
+// DNS servers 修正
+if (Array.isArray(config.dns.servers)) {
+  config.dns.servers = config.dns.servers.map(s => {
+    if (s?.tag === 'google' || s?.tag === 'proxy-dns') {
+      return {
+        ...s,
+        detour: 'Proxy'
+      }
+    }
+
+    if (s?.tag === 'public') {
+      return {
+        ...s,
+        domain_resolver: 'local'
+      }
+    }
+
+    return s
+  })
+}
+
+// no-home：删除 home / wg-home
 if (Array.isArray(config.outbounds)) {
   config.outbounds = config.outbounds.filter(o =>
-    o?.tag !== 'home' && o?.tag !== '__HOME_PLACEHOLDER__'
+    o?.tag !== 'home' &&
+    o?.tag !== '__HOME_PLACEHOLDER__' &&
+    o?.tag !== 'wg-home'
   )
 }
 
 if (Array.isArray(config.route.rules)) {
-  config.route.rules = config.route.rules.filter(r => r?.outbound !== 'home')
+  config.route.rules = config.route.rules.filter(r =>
+    r?.outbound !== 'home' &&
+    r?.outbound !== 'wg-home'
+  )
 }
 
-if (!config.dns) config.dns = {}
-if (!Array.isArray(config.dns.rules)) config.dns.rules = []
-
+// 规则下载域名走 local，避免 rule-set 下载依赖 Proxy
 const downloadDomains = [
   'ghfast.top',
   'raw.githubusercontent.com',
   'github.com',
   'gh-proxy.com',
+  'ghproxy.net',
   'testingcf.jsdelivr.net',
   'cdn.jsdelivr.net'
 ]
@@ -65,7 +95,12 @@ if (!downloadDnsRule) {
     server: 'local',
     strategy: 'ipv4_only'
   }
-  config.dns.rules.splice(Math.min(2, config.dns.rules.length), 0, downloadDnsRule)
+
+  config.dns.rules.splice(
+    Math.min(2, config.dns.rules.length),
+    0,
+    downloadDnsRule
+  )
 }
 
 downloadDomains.forEach(d => {
@@ -74,6 +109,7 @@ downloadDomains.forEach(d => {
   }
 })
 
+// rule-set：1.13.11 使用 download_detour，不使用 http_client
 if (Array.isArray(config.route.rule_set)) {
   config.route.rule_set = config.route.rule_set.map(rs => {
     if (rs?.type === 'remote' && typeof rs.url === 'string') {
@@ -92,6 +128,8 @@ if (Array.isArray(config.route.rule_set)) {
         )
     }
 
+    delete rs.http_client
+
     if (rs?.type === 'remote') {
       rs.download_detour = 'direct'
     }
@@ -100,6 +138,7 @@ if (Array.isArray(config.route.rule_set)) {
   })
 }
 
+// 获取代理节点
 let proxies
 
 if (url) {
@@ -131,26 +170,46 @@ if (url) {
 
 const proxyTags = proxies.map(p => p.tag)
 
+if (proxyTags.length === 0) {
+  throw new Error('没有获取到代理节点')
+}
+
+// 避免重复注入旧节点
+config.outbounds = config.outbounds.filter(o => {
+  if (!o?.tag) return true
+  if (o.tag === 'Proxy') return true
+  if (o.tag === 'direct') return true
+  return !proxyTags.includes(o.tag)
+})
+
 config.outbounds.push(...proxies)
 
-const proxyGroup = config.outbounds.find(o => o?.tag === 'Proxy' && Array.isArray(o?.outbounds))
+const proxyGroup = config.outbounds.find(o =>
+  o?.tag === 'Proxy' &&
+  Array.isArray(o?.outbounds)
+)
 
 if (!proxyGroup) {
   throw new Error('模板中未找到 tag=Proxy 的 selector')
 }
 
-proxyGroup.outbounds = [...proxyTags, 'direct']
+proxyGroup.outbounds = [
+  ...proxyTags,
+  'direct'
+]
 
 if (!proxyGroup.outbounds.length) {
   proxyGroup.outbounds = ['direct']
 }
 
-if (!proxyGroup.default || !proxyTags.includes(proxyGroup.default)) {
+if (!proxyGroup.default || !proxyGroup.outbounds.includes(proxyGroup.default)) {
   proxyGroup.default = proxyTags[0] || 'direct'
 }
 
+// 删除 auto 旧组
 config.outbounds = config.outbounds.filter(o => o?.tag !== 'auto')
 
+// 校验
 const proxyGroupCheck = config.outbounds.find(o => o?.tag === 'Proxy')
 
 if (!proxyGroupCheck || !Array.isArray(proxyGroupCheck.outbounds)) {
@@ -165,14 +224,31 @@ if (proxyGroupCheck.outbounds.includes('auto')) {
   throw new Error('最终配置中 Proxy 组不应包含 auto')
 }
 
-if (proxyGroupCheck.outbounds.includes('home')) {
-  throw new Error('no-home 配置中 Proxy 组不应包含 home')
+if (
+  proxyGroupCheck.outbounds.includes('home') ||
+  proxyGroupCheck.outbounds.includes('wg-home')
+) {
+  throw new Error('no-home 配置中 Proxy 组不应包含 home / wg-home')
+}
+
+const proxyDns = config.dns?.servers?.find(s =>
+  s?.tag === 'google' ||
+  s?.tag === 'proxy-dns'
+)
+
+if (proxyDns && proxyDns.detour !== 'Proxy') {
+  throw new Error(`DNS 服务器 ${proxyDns.tag} 必须 detour 到 Proxy`)
+}
+
+const localDns = config.dns?.servers?.find(s => s?.tag === 'local')
+if (!localDns) {
+  throw new Error('缺少 local DNS，route.default_domain_resolver 会失效')
 }
 
 $content = JSON.stringify(config, null, 2)
 
 function log(v) {
-  console.log(`[📦 Windows 1.13 自建节点 no-home 脚本] ${v}`)
+  console.log(`[📦 Windows 1.13.11 自建节点 no-home 脚本] ${v}`)
 }
 
-log(`✅ 完成`)
+log('✅ 完成')
