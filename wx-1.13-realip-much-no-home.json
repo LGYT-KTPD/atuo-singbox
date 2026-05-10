@@ -53,7 +53,8 @@
           "github.com",
           "gh-proxy.com",
           "testingcf.jsdelivr.net",
-          "cdn.jsdelivr.net"
+          "cdn.jsdelivr.net",
+          "ghproxy.net"
         ],
         "action": "route",
         "server": "local",
@@ -132,10 +133,10 @@
       "tag": "Proxy",
       "type": "selector",
       "outbounds": [
-        "auto",
+        "__PROXY_PLACEHOLDER__",
         "direct"
       ],
-      "default": "auto"
+      "default": "__PROXY_PLACEHOLDER__"
     },
     {
       "tag": "OpenAI",
