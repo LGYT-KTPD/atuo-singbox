@@ -1,7 +1,8 @@
 // Windows sing-box 1.13.11 专用：机场多分组 no-home
 // 不使用 http_clients / route.default_http_client
+// 不使用 selector.default / urltest.default
 // 规则下载使用 download_detour: direct
-// 关键：Proxy.default 必须默认第一个真实代理节点，不能是 direct / auto
+// 默认节点由 outbounds 数组第一个真实代理节点决定
 
 log('🚀 开始')
 
@@ -43,7 +44,7 @@ if (config.experimental?.clash_api?.external_ui_http_client) {
   delete config.experimental.clash_api.external_ui_http_client
 }
 
-// Windows 1.13.11 不使用 http_clients / default_http_client
+// Windows 1.13.11 不支持这些
 delete config.http_clients
 
 if (!config.route) config.route = {}
@@ -88,6 +89,16 @@ if (Array.isArray(config.route.rules)) {
     r?.outbound !== 'home' &&
     r?.outbound !== 'wg-home'
   )
+}
+
+// 删除所有 1.13.11 不支持的 default 字段
+if (Array.isArray(config.outbounds)) {
+  config.outbounds = config.outbounds.map(o => {
+    if (o && typeof o === 'object') {
+      delete o.default
+    }
+    return o
+  })
 }
 
 // 规则下载域名走 local，避免 rule-set 下载依赖 Proxy
@@ -220,8 +231,12 @@ const outboundRules = (outbound || '')
     ]
   })
 
-// 清理各分组里的 auto / 占位符 / 旧重复项
+// 清理各分组里的 auto / 占位符 / home / wg-home / 旧 default
 config.outbounds.forEach(o => {
+  if (o && typeof o === 'object') {
+    delete o.default
+  }
+
   if (Array.isArray(o.outbounds)) {
     o.outbounds = o.outbounds.filter(x =>
       x !== 'auto' &&
@@ -289,13 +304,13 @@ if (!proxyGroup) {
   throw new Error('最终配置中 Proxy 组不存在或格式错误')
 }
 
+// Windows 1.13.11 默认由 outbounds 第一个节点决定
 proxyGroup.outbounds = uniq([
   ...proxyTags,
   'direct'
 ])
 
-// 关键修复：Proxy 默认必须是第一个真实代理节点，不能是 direct / auto
-proxyGroup.default = proxyTags[0] || 'direct'
+delete proxyGroup.default
 
 // 确保 direct 存在
 if (!config.outbounds.some(o => o?.tag === 'direct')) {
@@ -305,8 +320,12 @@ if (!config.outbounds.some(o => o?.tag === 'direct')) {
   })
 }
 
-// 修复其他 selector/urltest 的 default
+// 最后兜底：删除所有 selector/urltest 的 default
 config.outbounds.forEach(o => {
+  if (o && typeof o === 'object') {
+    delete o.default
+  }
+
   if (
     (o?.type === 'selector' || o?.type === 'urltest') &&
     Array.isArray(o.outbounds)
@@ -317,12 +336,6 @@ config.outbounds.forEach(o => {
       x !== 'home' &&
       x !== 'wg-home'
     ))
-
-    if (o.tag !== 'Proxy') {
-      if (!o.default || !o.outbounds.includes(o.default)) {
-        o.default = o.outbounds[0]
-      }
-    }
   }
 })
 
@@ -334,6 +347,10 @@ if (
   proxyGroup.outbounds.includes('__PROXY_PLACEHOLDER__')
 ) {
   throw new Error('no-home 配置中 Proxy 组不应包含 home / wg-home / auto / placeholder')
+}
+
+if (proxyGroup.outbounds[0] === 'direct') {
+  throw new Error('Proxy 组第一个不能是 direct，否则国外流量会直连')
 }
 
 const proxyDns = config.dns?.servers?.find(s =>
