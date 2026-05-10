@@ -1,6 +1,6 @@
 // Windows sing-box 1.13.11 专用：自建节点少节点 no-home
-// 注意：1.13.11 不使用 http_clients / route.default_http_client
-// 规则下载继续使用 download_detour: direct
+// 1.13.11 不使用 http_clients / route.default_http_client
+// 规则下载使用 download_detour: direct
 
 log('🚀 开始')
 
@@ -20,7 +20,6 @@ if (config.experimental?.clash_api?.external_ui_http_client) {
   delete config.experimental.clash_api.external_ui_http_client
 }
 
-// 1.13.11 不使用 http_clients
 delete config.http_clients
 
 if (!config.route) config.route = {}
@@ -30,7 +29,6 @@ delete config.route.default_http_client
 if (!config.dns) config.dns = {}
 if (!Array.isArray(config.dns.rules)) config.dns.rules = []
 
-// DNS servers 修正
 if (Array.isArray(config.dns.servers)) {
   config.dns.servers = config.dns.servers.map(s => {
     if (s?.tag === 'google' || s?.tag === 'proxy-dns') {
@@ -51,7 +49,6 @@ if (Array.isArray(config.dns.servers)) {
   })
 }
 
-// no-home：删除 home / wg-home
 if (Array.isArray(config.outbounds)) {
   config.outbounds = config.outbounds.filter(o =>
     o?.tag !== 'home' &&
@@ -67,7 +64,6 @@ if (Array.isArray(config.route.rules)) {
   )
 }
 
-// 规则下载域名走 local，避免 rule-set 下载依赖 Proxy
 const downloadDomains = [
   'ghfast.top',
   'raw.githubusercontent.com',
@@ -109,7 +105,6 @@ downloadDomains.forEach(d => {
   }
 })
 
-// rule-set：1.13.11 使用 download_detour，不使用 http_client
 if (Array.isArray(config.route.rule_set)) {
   config.route.rule_set = config.route.rule_set.map(rs => {
     if (rs?.type === 'remote' && typeof rs.url === 'string') {
@@ -138,7 +133,6 @@ if (Array.isArray(config.route.rule_set)) {
   })
 }
 
-// 获取代理节点
 let proxies
 
 if (url) {
@@ -174,7 +168,6 @@ if (proxyTags.length === 0) {
   throw new Error('没有获取到代理节点')
 }
 
-// 避免重复注入旧节点
 config.outbounds = config.outbounds.filter(o => {
   if (!o?.tag) return true
   if (o.tag === 'Proxy') return true
@@ -198,18 +191,11 @@ proxyGroup.outbounds = [
   'direct'
 ]
 
-if (!proxyGroup.outbounds.length) {
-  proxyGroup.outbounds = ['direct']
-}
+// 关键修复：Windows 自建节点 no-home 默认必须走第一个代理节点，不能默认 direct
+proxyGroup.default = proxyTags[0] || 'direct'
 
-if (!proxyGroup.default || !proxyGroup.outbounds.includes(proxyGroup.default)) {
-  proxyGroup.default = proxyTags[0] || 'direct'
-}
-
-// 删除 auto 旧组
 config.outbounds = config.outbounds.filter(o => o?.tag !== 'auto')
 
-// 校验
 const proxyGroupCheck = config.outbounds.find(o => o?.tag === 'Proxy')
 
 if (!proxyGroupCheck || !Array.isArray(proxyGroupCheck.outbounds)) {
