@@ -131,9 +131,10 @@
       "tag": "Proxy",
       "type": "selector",
       "outbounds": [
+        "__PROXY_PLACEHOLDER__",
         "direct"
       ],
-      "default": "direct"
+      "default": "__PROXY_PLACEHOLDER__"
     },
     {
       "type": "direct",
