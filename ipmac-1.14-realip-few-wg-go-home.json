@@ -12,7 +12,7 @@
     "cache_file": {
       "enabled": true,
       "store_dns": true,
-      "store_fakeip": false
+      "store_fakeip": true
     }
   },
   "dns": {
@@ -65,6 +65,11 @@
         "server_port": 853,
         "domain_resolver": "hosts-fix",
         "detour": "Proxy"
+      },
+      {
+        "type": "fakeip",
+        "tag": "fakeip",
+        "inet4_range": "198.18.0.0/15"
       }
     ],
     "rules": [
@@ -83,6 +88,61 @@
           "PTR"
         ],
         "action": "reject"
+      },
+      {
+        "domain_suffix": [
+          "google.com",
+          "google.com.hk",
+          "googleapis.com",
+          "gstatic.com",
+          "ggpht.com",
+          "googleusercontent.com",
+          "youtube.com",
+          "ytimg.com",
+          "googlevideo.com",
+          "voice.google.com",
+          "googlevoice.com",
+          "clients4.google.com",
+          "clients6.google.com",
+          "hangouts.google.com"
+        ],
+        "action": "route",
+        "server": "fakeip"
+      },
+      {
+        "domain_suffix": [
+          "telegram.org",
+          "t.me",
+          "tdesktop.com",
+          "telegra.ph"
+        ],
+        "action": "route",
+        "server": "fakeip"
+      },
+      {
+        "domain_suffix": [
+          "github.com",
+          "githubusercontent.com",
+          "githubassets.com",
+          "github.io",
+          "raw.githubusercontent.com",
+          "objects.githubusercontent.com"
+        ],
+        "action": "route",
+        "server": "fakeip"
+      },
+      {
+        "domain_suffix": [
+          "openai.com",
+          "chatgpt.com",
+          "oaistatic.com",
+          "oaiusercontent.com",
+          "auth0.openai.com",
+          "cdn.openai.com",
+          "api.openai.com"
+        ],
+        "action": "route",
+        "server": "fakeip"
       },
       {
         "clash_mode": "direct",
@@ -199,6 +259,12 @@
           "192.168.1.0/24"
         ],
         "outbound": "wg-home"
+      },
+      {
+        "ip_cidr": [
+          "198.18.0.0/15"
+        ],
+        "outbound": "Proxy"
       },
       {
         "domain_suffix": [
