@@ -1,4 +1,4 @@
-// iPhone / Mac sing-box 1.14-alpha.21：WireGuard endpoint 回家 + 代理节点订阅注入（增强稳定版）
+// iPhone / Mac sing-box 1.14-alpha：WireGuard endpoint 回家 + 代理节点订阅注入（融合 alpha.24 优点增强版）
 
 console.log('🚀 开始生成 WireGuard 回家配置')
 
@@ -43,6 +43,30 @@ function requireEnv(names) {
   }
 }
 
+function upsertByTag(arr, item) {
+  const index = arr.findIndex(x => x?.tag === item.tag)
+  if (index >= 0) {
+    arr[index] = {
+      ...arr[index],
+      ...item
+    }
+  } else {
+    arr.push(item)
+  }
+}
+
+function removeDnsRuleStrategy(rule) {
+  if (!rule || typeof rule !== 'object') return rule
+
+  delete rule.strategy
+
+  if (Array.isArray(rule.rules)) {
+    rule.rules = rule.rules.map(removeDnsRuleStrategy)
+  }
+
+  return rule
+}
+
 requireEnv([
   'WG_PRIVATE_KEY',
   'WG_PEER_ADDRESS',
@@ -54,16 +78,29 @@ if (config.experimental?.clash_api?.external_ui_http_client) {
   delete config.experimental.clash_api.external_ui_http_client
 }
 
+if (!config.experimental) config.experimental = {}
+if (!config.experimental.cache_file) config.experimental.cache_file = {}
 if (!config.route) config.route = {}
 if (!config.dns) config.dns = {}
+if (!Array.isArray(config.dns.servers)) config.dns.servers = []
+if (!Array.isArray(config.dns.rules)) config.dns.rules = []
 if (!Array.isArray(config.endpoints)) config.endpoints = []
 if (!Array.isArray(config.outbounds)) config.outbounds = []
 if (!Array.isArray(config.http_clients)) config.http_clients = []
 
-// alpha.21 DNS 增强
-config.dns.timeout = '3s'
-config.dns.strategy = 'ipv4_only'
+// experimental.cache_file 增强
+config.experimental.cache_file.enabled = true
+config.experimental.cache_file.store_dns = true
+config.experimental.cache_file.store_fakeip = false
 
+// alpha.24 DNS 增强：稳定优先，不启用全局 FakeIP
+config.dns.timeout = '3s'
+config.dns.strategy = 'prefer_ipv4'
+config.dns.cache_capacity = 32768
+config.dns.reverse_mapping = true
+config.dns.optimistic = true
+
+// 1.14 启动下载解耦
 if (!config.http_clients.some(c => c?.tag === 'direct')) {
   config.http_clients.unshift({
     tag: 'direct'
@@ -73,7 +110,63 @@ if (!config.http_clients.some(c => c?.tag === 'direct')) {
 config.route.default_http_client = 'direct'
 config.route.default_domain_resolver = 'local-dns'
 
-// tun-in 增强
+// DNS server：吸收 alpha.24 的 hosts_fix / local / mdns 思路
+upsertByTag(config.dns.servers, {
+  type: 'hosts',
+  tag: 'hosts-fix',
+  predefined: {
+    'dns.google': [
+      '8.8.8.8',
+      '8.8.4.4'
+    ],
+    'dns.alidns.com': [
+      '223.5.5.5',
+      '223.6.6.6'
+    ],
+    'cloudflare-dns.com': [
+      '104.16.248.249',
+      '104.16.249.249'
+    ]
+  }
+})
+
+upsertByTag(config.dns.servers, {
+  type: 'local',
+  tag: 'local',
+  neighbor_domain: [
+    '.local',
+    '.lan'
+  ]
+})
+
+upsertByTag(config.dns.servers, {
+  type: 'mdns',
+  tag: 'mdns-server'
+})
+
+upsertByTag(config.dns.servers, {
+  tag: 'local-dns',
+  type: 'udp',
+  server: '223.5.5.5'
+})
+
+upsertByTag(config.dns.servers, {
+  tag: 'home-dns',
+  type: 'udp',
+  server: '192.168.1.118',
+  detour: 'wg-home'
+})
+
+upsertByTag(config.dns.servers, {
+  tag: 'proxy-dns',
+  type: 'tls',
+  server: 'dns.google',
+  server_port: 853,
+  domain_resolver: 'hosts-fix',
+  detour: 'Proxy'
+})
+
+// tun-in 增强：完整 DNS hijack
 if (Array.isArray(config.inbounds)) {
   config.inbounds = config.inbounds.map(i => {
     if (i?.type === 'tun' && i?.tag === 'tun-in') {
@@ -87,77 +180,59 @@ if (Array.isArray(config.inbounds)) {
   })
 }
 
-// DNS servers 修正
-if (Array.isArray(config.dns.servers)) {
-  config.dns.servers = config.dns.servers.map(s => {
-    if (s?.tag === 'proxy-dns') {
-      return {
-        ...s,
-        detour: 'Proxy'
-      }
-    }
-
-    if (s?.tag === 'home-dns') {
-      return {
-        ...s,
-        detour: 'wg-home'
-      }
-    }
-
-    return s
-  })
-}
-
 // DNS rules 修正
-if (!Array.isArray(config.dns.rules)) {
-  config.dns.rules = []
-}
+config.dns.rules = config.dns.rules
+  .map(removeDnsRuleStrategy)
+  .filter(r => {
+    // 删除新版 1.14 不允许的 DNS 请求侧 ip_cidr 规则
+    // 内网 IP 走 route.rules，内网域名走 home-dns
+    if (r?.ip_cidr && !r?.match_response) return false
+    return true
+  })
 
-// 删除新版 1.14 不允许的 DNS 请求侧 ip_cidr 规则
-// dns.rules 里的 ip_cidr 属于响应匹配字段，必须 match_response=true；
-// 这里原本想让内网走 home-dns，应改成按域名后缀走 home-dns。
+// 内网域名走 home-dns
 config.dns.rules = config.dns.rules.filter(r => {
-  if (r?.ip_cidr && !r?.match_response) return false
+  if (
+    Array.isArray(r?.domain_suffix) &&
+    r.domain_suffix.includes('ktpd.fun') &&
+    r.server === 'home-dns'
+  ) {
+    return false
+  }
   return true
 })
 
-// 内网域名走 home-dns
-const hasHomeDomainRule = config.dns.rules.some(r =>
-  Array.isArray(r?.domain_suffix) &&
-  r.domain_suffix.includes('ktpd.fun') &&
-  r.server === 'home-dns'
-)
+config.dns.rules.unshift({
+  domain_suffix: [
+    'ktpd.fun',
+    'xwcac68u.top'
+  ],
+  action: 'route',
+  server: 'home-dns'
+})
 
-if (!hasHomeDomainRule) {
-  config.dns.rules.unshift({
-    domain_suffix: [
-      'ktpd.fun',
-      'xwcac68u.top'
-    ],
-    action: 'route',
-    server: 'home-dns'
-  })
-}
+// DNS rules 增强：减少 iOS/macOS 的 HTTPS/SVCB/PTR 噪音
+config.dns.rules = config.dns.rules.filter(r => {
+  if (
+    Array.isArray(r?.query_type) &&
+    r.query_type.includes('SVCB') &&
+    r.query_type.includes('HTTPS') &&
+    r.query_type.includes('PTR') &&
+    r.action === 'reject'
+  ) {
+    return false
+  }
+  return true
+})
 
-// DNS rules 增强：减少 HTTPS/SVCB/PTR 噪音
-const hasRejectRule = config.dns.rules.some(r =>
-  Array.isArray(r?.query_type) &&
-  r.query_type.includes('SVCB') &&
-  r.query_type.includes('HTTPS') &&
-  r.query_type.includes('PTR') &&
-  r.action === 'reject'
-)
-
-if (!hasRejectRule) {
-  config.dns.rules.splice(1, 0, {
-    query_type: [
-      'SVCB',
-      'HTTPS',
-      'PTR'
-    ],
-    action: 'reject'
-  })
-}
+config.dns.rules.splice(1, 0, {
+  query_type: [
+    'SVCB',
+    'HTTPS',
+    'PTR'
+  ],
+  action: 'reject'
+})
 
 // 获取代理节点
 let proxies
@@ -313,6 +388,7 @@ if (Array.isArray(config.route.rule_set)) {
 
     delete rs.download_detour
     delete rs.http_client
+
     return rs
   })
 }
@@ -338,4 +414,4 @@ if (homeDns && homeDns.detour !== 'wg-home') {
 
 $content = JSON.stringify(config, null, 2)
 
-console.log('✅ 完成 WireGuard 回家配置生成（alpha.21 增强稳定版）')
+console.log('✅ 完成 WireGuard 回家配置生成（融合 alpha.24 优点增强版）')
