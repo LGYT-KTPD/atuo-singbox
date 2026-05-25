@@ -59,8 +59,8 @@
       },
       {
         "rule_set": [
-          "geosite_adguard",
-          "geosite-category-ads-all"
+          "geosite-category-ads-all",
+          "geosite_adguard"
         ],
         "action": "reject"
       },
@@ -109,10 +109,9 @@
       },
       {
         "rule_set": [
-          "geosite-cn",
+          "cn",
           "microsoft-cn",
           "apple-cn",
-          "google-cn",
           "games-cn",
           "networktest"
         ],
@@ -122,10 +121,11 @@
         "rule_set": [
           "geosite-!cn",
           "geosite-google",
-          "telegramip",
+          "geosite-youtube",
           "proxy",
           "games",
-          "ai"
+          "ai",
+          "telegramip"
         ],
         "query_type": [
           "A",
@@ -266,8 +266,8 @@
       },
       {
         "rule_set": [
-          "geosite_adguard",
-          "geosite-category-ads-all"
+          "geosite-category-ads-all",
+          "geosite_adguard"
         ],
         "action": "reject"
       },
@@ -288,6 +288,7 @@
       {
         "rule_set": [
           "geosite-google",
+          "geosite-youtube",
           "telegramip",
           "proxy",
           "games",
@@ -302,11 +303,10 @@
       {
         "rule_set": [
           "private",
-          "geosite-cn",
-          "geoip-cn",
+          "cn",
+          "cnip",
           "microsoft-cn",
           "apple-cn",
-          "google-cn",
           "games-cn",
           "networktest"
         ],
@@ -318,7 +318,7 @@
         "tag": "geosite-category-ads-all",
         "type": "remote",
         "format": "binary",
-        "url": "https://gh-proxy.com/https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-category-ads-all.srs",
+        "url": "https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-category-ads-all.srs",
         "download_detour": "🎯 全球直连",
         "update_interval": "48h"
       },
@@ -326,23 +326,7 @@
         "tag": "geosite_adguard",
         "type": "remote",
         "format": "binary",
-        "url": "https://gh-proxy.com/https://cdn.jsdelivr.net/gh/217heidai/adblockfilters@main/rules/adblocksingbox.srs",
-        "download_detour": "🎯 全球直连",
-        "update_interval": "48h"
-      },
-      {
-        "tag": "geosite-!cn",
-        "type": "remote",
-        "format": "binary",
-        "url": "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-!cn.srs",
-        "download_detour": "🎯 全球直连",
-        "update_interval": "48h"
-      },
-      {
-        "tag": "geosite-cn",
-        "type": "remote",
-        "format": "binary",
-        "url": "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs",
+        "url": "https://cdn.jsdelivr.net/gh/217heidai/adblockfilters@main/rules/adblocksingbox.srs",
         "download_detour": "🎯 全球直连",
         "update_interval": "48h"
       },
@@ -350,7 +334,23 @@
         "tag": "geosite-google",
         "type": "remote",
         "format": "binary",
-        "url": "https://gh-proxy.com/https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-google.srs",
+        "url": "https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-google.srs",
+        "download_detour": "🎯 全球直连",
+        "update_interval": "48h"
+      },
+      {
+        "tag": "geosite-youtube",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-youtube.srs",
+        "download_detour": "🎯 全球直连",
+        "update_interval": "48h"
+      },
+      {
+        "tag": "geosite-!cn",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-geolocation-!cn.srs",
         "download_detour": "🎯 全球直连",
         "update_interval": "48h"
       },
@@ -358,7 +358,7 @@
         "tag": "proxy",
         "type": "remote",
         "format": "binary",
-        "url": "https://gh-proxy.com/https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/proxy.srs",
+        "url": "https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/proxy.srs",
         "download_detour": "🎯 全球直连",
         "update_interval": "48h"
       },
@@ -366,7 +366,7 @@
         "tag": "games",
         "type": "remote",
         "format": "binary",
-        "url": "https://gh-proxy.com/https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/games.srs",
+        "url": "https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/games.srs",
         "download_detour": "🎯 全球直连",
         "update_interval": "48h"
       },
@@ -374,7 +374,7 @@
         "tag": "ai",
         "type": "remote",
         "format": "binary",
-        "url": "https://gh-proxy.com/https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/ai.srs",
+        "url": "https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/ai.srs",
         "download_detour": "🎯 全球直连",
         "update_interval": "48h"
       },
@@ -382,7 +382,15 @@
         "tag": "private",
         "type": "remote",
         "format": "binary",
-        "url": "https://gh-proxy.com/https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/private.srs",
+        "url": "https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/private.srs",
+        "download_detour": "🎯 全球直连",
+        "update_interval": "48h"
+      },
+      {
+        "tag": "cn",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/cn.srs",
         "download_detour": "🎯 全球直连",
         "update_interval": "48h"
       },
@@ -390,7 +398,7 @@
         "tag": "microsoft-cn",
         "type": "remote",
         "format": "binary",
-        "url": "https://gh-proxy.com/https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/microsoft-cn.srs",
+        "url": "https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/microsoft-cn.srs",
         "download_detour": "🎯 全球直连",
         "update_interval": "48h"
       },
@@ -398,15 +406,7 @@
         "tag": "apple-cn",
         "type": "remote",
         "format": "binary",
-        "url": "https://gh-proxy.com/https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/apple-cn.srs",
-        "download_detour": "🎯 全球直连",
-        "update_interval": "48h"
-      },
-      {
-        "tag": "google-cn",
-        "type": "remote",
-        "format": "binary",
-        "url": "https://gh-proxy.com/https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/google-cn.srs",
+        "url": "https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/apple-cn.srs",
         "download_detour": "🎯 全球直连",
         "update_interval": "48h"
       },
@@ -414,7 +414,7 @@
         "tag": "games-cn",
         "type": "remote",
         "format": "binary",
-        "url": "https://gh-proxy.com/https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/games-cn.srs",
+        "url": "https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/games-cn.srs",
         "download_detour": "🎯 全球直连",
         "update_interval": "48h"
       },
@@ -422,7 +422,7 @@
         "tag": "networktest",
         "type": "remote",
         "format": "binary",
-        "url": "https://gh-proxy.com/https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/networktest.srs",
+        "url": "https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/networktest.srs",
         "download_detour": "🎯 全球直连",
         "update_interval": "48h"
       },
@@ -430,15 +430,15 @@
         "tag": "telegramip",
         "type": "remote",
         "format": "binary",
-        "url": "https://gh-proxy.com/https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/telegramip.srs",
+        "url": "https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/telegramip.srs",
         "download_detour": "🎯 全球直连",
         "update_interval": "48h"
       },
       {
-        "tag": "geoip-cn",
+        "tag": "cnip",
         "type": "remote",
         "format": "binary",
-        "url": "https://gh-proxy.com/https://github.com/qljsyph/ruleset-icon/raw/refs/heads/main/sing-box/geoip/China-ASN-combined-ip.srs",
+        "url": "https://cdn.jsdelivr.net/gh/DustinWin/ruleset_geodata@sing-box-ruleset/cnip.srs",
         "download_detour": "🎯 全球直连",
         "update_interval": "48h"
       }
