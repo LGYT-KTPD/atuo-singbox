@@ -1,51 +1,63 @@
-// momo / OpenWrt 专用：Sub-Store 自动注入 sing-box 节点
-// 适合：自建少量节点 / 组合订阅 / 单订阅
+// OpenWrt / momo 专用 Sub-Store 自动注入脚本
+// 适配目标：sing-box 1.13.12 + momo
+//
 // 作用：
-// 1. 读取模板 JSON
-// 2. 从 Sub-Store 订阅或组合订阅生成 sing-box outbounds/endpoints
-// 3. 自动注入到：
-//    - ♻️ 自动选择
-//    - 🐸 手动选择
-// 4. 自动清理占位节点
-// 5. 保留 momo 必需 inbounds：dns-in / redirect-in / tproxy-in / tun-in
+// 1. 读取 Sub-Store 单订阅或组合订阅
+// 2. 生成 sing-box outbounds / endpoints
+// 3. 自动注入到 ♻️ 自动选择
+// 4. 自动注入到 🐸 手动选择
+// 5. 保留 momo 必需入口：dns-in / redirect-in / tproxy-in / tun-in
+// 6. 清理重复节点 tag，避免多次生成后重复堆叠
+//
+// 参数示例：
+// name=你的订阅名&type=subscription
+// name=你的组合订阅名&type=collection
+// url=https://example.com/sub&type=subscription&name=remote
 
-log(`🚀 开始生成 momo 配置`)
+log(`🚀 开始生成 momo sing-box 配置`)
 
 let { type, name, includeUnsupportedProxy, url } = $arguments
 
-log(`传入参数 type=${type}, name=${name}, url=${url ? '已提供' : '未提供'}`)
-
-type = /^1$|col|collection|组合/i.test(type) ? 'collection' : 'subscription'
+type = /^1$|col|collection|组合/i.test(type || '')
+  ? 'collection'
+  : 'subscription'
 
 const parser = ProxyUtils.JSON5 || JSON
+
+log(`① 解析模板文件`)
 
 let config
 try {
   config = parser.parse($content ?? $files[0])
 } catch (e) {
-  log(`❌ 模板解析失败：${e.message ?? e}`)
-  throw new Error(`配置文件不是合法的 ${ProxyUtils.JSON5 ? 'JSON5' : 'JSON'} 格式`)
+  log(`${e.message ?? e}`)
+  throw new Error(`模板文件不是合法 JSON/JSON5`)
 }
 
-log(`① 获取订阅节点`)
+if (!name && !url) {
+  throw new Error(`缺少参数：必须传入 name=订阅名，或 url=订阅链接`)
+}
 
-let data
+log(`② 获取订阅：type=${type}, name=${name || 'remote-url'}`)
+
+let rawArtifact
+
 if (url) {
-  data = await produceArtifact({
-    name,
+  rawArtifact = await produceArtifact({
+    name: name || 'remote-url',
     type,
     platform: 'sing-box',
     produceOpts: {
       'include-unsupported-proxy': includeUnsupportedProxy,
     },
     subscription: {
-      name,
+      name: name || 'remote-url',
       url,
       source: 'remote',
     },
   })
 } else {
-  data = await produceArtifact({
+  rawArtifact = await produceArtifact({
     name,
     type,
     platform: 'sing-box',
@@ -55,17 +67,23 @@ if (url) {
   })
 }
 
+let generated
 try {
-  data = JSON.parse(data)
+  generated = JSON.parse(rawArtifact)
 } catch (e) {
-  log(`❌ 订阅生成结果不是合法 JSON：${e.message ?? e}`)
-  throw new Error(`订阅生成失败`)
+  log(`${e.message ?? e}`)
+  throw new Error(`Sub-Store 生成的 sing-box 配置不是合法 JSON`)
 }
 
-const subOutbounds = Array.isArray(data.outbounds) ? data.outbounds : []
-const subEndpoints = Array.isArray(data.endpoints) ? data.endpoints : []
+const generatedOutbounds = Array.isArray(generated.outbounds)
+  ? generated.outbounds
+  : []
 
-log(`获取到 outbounds=${subOutbounds.length}，endpoints=${subEndpoints.length}`)
+const generatedEndpoints = Array.isArray(generated.endpoints)
+  ? generated.endpoints
+  : []
+
+log(`③ 获取到 outbounds=${generatedOutbounds.length}, endpoints=${generatedEndpoints.length}`)
 
 if (!Array.isArray(config.outbounds)) {
   config.outbounds = []
@@ -75,154 +93,235 @@ if (!Array.isArray(config.endpoints)) {
   config.endpoints = []
 }
 
-const injectedItems = [...subOutbounds, ...subEndpoints]
-const injectedTags = unique(
-  injectedItems
-    .map(item => item?.tag)
-    .filter(Boolean)
+const reservedOutboundTags = new Set([
+  '🚀 默认代理',
+  '🐸 手动选择',
+  '♻️ 自动选择',
+  'GLOBAL',
+  '🎯 全球直连',
+  'COMPATIBLE',
+])
+
+const cleanOutbounds = dedupeByTag(
+  generatedOutbounds.filter(o => o && o.tag && o.type)
 )
 
-if (injectedTags.length === 0) {
-  log(`⚠️ 未获取到有效节点，将使用 COMPATIBLE 兜底`)
-  ensureDirectOutbound(config, 'COMPATIBLE')
-  injectedTags.push('COMPATIBLE')
-}
+const cleanEndpoints = dedupeByTag(
+  generatedEndpoints.filter(e => e && e.tag && e.type)
+)
 
-log(`② 清理模板中的占位节点`)
-
-const placeholderTags = [
-  '你的节点1',
-  '__PROXY_PLACEHOLDER__',
-  '__NODE_PLACEHOLDER__',
-  'COMPATIBLE'
+const injectedTags = [
+  ...cleanOutbounds.map(o => o.tag),
+  ...cleanEndpoints.map(e => e.tag),
 ]
 
+const uniqueInjectedTags = [...new Set(injectedTags)]
+
+log(`④ 有效可注入节点数量：${uniqueInjectedTags.length}`)
+
+const defaultGroup = findOutbound(config, '🚀 默认代理')
+const manualGroup = findOutbound(config, '🐸 手动选择')
+const autoGroup = findOutbound(config, '♻️ 自动选择')
+const globalGroup = findOutbound(config, 'GLOBAL')
+const directOutbound = findOutbound(config, '🎯 全球直连')
+
+if (!defaultGroup) {
+  throw new Error(`模板缺少 outbound：🚀 默认代理`)
+}
+
+if (!manualGroup) {
+  throw new Error(`模板缺少 outbound：🐸 手动选择`)
+}
+
+if (!autoGroup) {
+  throw new Error(`模板缺少 outbound：♻️ 自动选择`)
+}
+
+if (!directOutbound) {
+  config.outbounds.push({
+    tag: '🎯 全球直连',
+    type: 'direct',
+  })
+}
+
+ensureOutbounds(defaultGroup)
+ensureOutbounds(manualGroup)
+ensureOutbounds(autoGroup)
+
+if (globalGroup) {
+  ensureOutbounds(globalGroup)
+}
+
+log(`⑤ 清理旧注入节点`)
+
+const injectedTagSet = new Set(uniqueInjectedTags)
+
 config.outbounds = config.outbounds.filter(o => {
-  if (!o?.tag) return true
-  return !placeholderTags.includes(o.tag)
+  if (!o || !o.tag) return false
+  if (reservedOutboundTags.has(o.tag)) return true
+  if (injectedTagSet.has(o.tag)) return false
+  return true
 })
 
 config.endpoints = config.endpoints.filter(e => {
-  if (!e?.tag) return true
-  return !placeholderTags.includes(e.tag)
+  if (!e || !e.tag) return false
+  if (injectedTagSet.has(e.tag)) return false
+  return true
 })
 
-log(`③ 注入节点到选择器`)
+log(`⑥ 写入分组`)
 
-const defaultSelector = findOutbound(config, '🚀 默认代理')
-const manualSelector = findOutbound(config, '🐸 手动选择')
-const autoSelector = findOutbound(config, '♻️ 自动选择')
-const globalSelector = findOutbound(config, 'GLOBAL')
+let finalProxyTags = uniqueInjectedTags
 
-if (!defaultSelector) {
-  throw new Error(`模板中未找到 tag=🚀 默认代理 的 selector`)
+if (finalProxyTags.length === 0) {
+  ensureCompatible(config)
+  finalProxyTags = ['COMPATIBLE']
+  log(`⚠️ 未获取到有效节点，已使用 COMPATIBLE 兜底`)
 }
 
-if (!autoSelector) {
-  throw new Error(`模板中未找到 tag=♻️ 自动选择 的 urltest`)
-}
-
-ensureArray(defaultSelector, 'outbounds')
-ensureArray(autoSelector, 'outbounds')
-
-autoSelector.outbounds = mergeTags([], injectedTags)
-
-if (manualSelector) {
-  ensureArray(manualSelector, 'outbounds')
-  manualSelector.outbounds = mergeTags([], injectedTags)
-}
-
-defaultSelector.outbounds = mergeTags(
-  [
-    '♻️ 自动选择',
-    '🐸 手动选择',
-    '🎯 全球直连'
-  ],
-  []
-)
-
-if (globalSelector) {
-  ensureArray(globalSelector, 'outbounds')
-  globalSelector.outbounds = mergeTags(
-    [
-      '🚀 默认代理',
-      '🎯 全球直连',
-      '🐸 手动选择',
-      '♻️ 自动选择'
-    ],
-    []
-  )
-}
-
-log(`④ 写入订阅节点`)
-
-config.outbounds.push(...subOutbounds)
-config.endpoints.push(...subEndpoints)
-
-dedupeByTag(config.outbounds)
-dedupeByTag(config.endpoints)
-
-log(`⑤ 检查 momo 必需 inbound`)
-
-const requiredInbounds = [
-  'dns-in',
-  'redirect-in',
-  'tproxy-in',
-  'tun-in'
+defaultGroup.outbounds = [
+  '♻️ 自动选择',
+  '🐸 手动选择',
+  '🎯 全球直连',
 ]
+defaultGroup.default = defaultGroup.default || '♻️ 自动选择'
+defaultGroup.interrupt_exist_connections = false
 
-const inboundTags = new Set((config.inbounds || []).map(i => i?.tag))
+manualGroup.outbounds = finalProxyTags
+manualGroup.interrupt_exist_connections = false
 
-for (const tag of requiredInbounds) {
-  if (!inboundTags.has(tag)) {
-    throw new Error(`模板缺少 momo 必需 inbound：${tag}`)
-  }
+autoGroup.outbounds = finalProxyTags
+autoGroup.url = autoGroup.url || 'https://cp.cloudflare.com'
+autoGroup.interval = autoGroup.interval || '10m'
+autoGroup.tolerance = autoGroup.tolerance ?? 50
+autoGroup.idle_timeout = autoGroup.idle_timeout || '30m'
+autoGroup.interrupt_exist_connections = false
+
+if (globalGroup) {
+  globalGroup.outbounds = [
+    '🚀 默认代理',
+    '🎯 全球直连',
+    '🐸 手动选择',
+    '♻️ 自动选择',
+  ]
+  globalGroup.default = globalGroup.default || '🚀 默认代理'
+  globalGroup.interrupt_exist_connections = false
 }
 
-log(`✅ 注入完成：节点数量 ${injectedTags.length}`)
+log(`⑦ 追加订阅节点`)
+
+config.outbounds.push(...cleanOutbounds)
+
+if (!Array.isArray(config.endpoints)) {
+  config.endpoints = []
+}
+
+config.endpoints.push(...cleanEndpoints)
+
+log(`⑧ 修复 rule_set 引用`)
+
+fixRuleSetReferences(config)
+
+log(`⑨ 检查 momo 必要入口`)
+
+checkMomoInbounds(config)
 
 $content = JSON.stringify(config, null, 2)
 
+log(`✅ 完成：已注入 ${finalProxyTags.length} 个节点`)
+log(`🔚 结束`)
+
 function findOutbound(config, tag) {
-  return config.outbounds.find(o => o?.tag === tag)
+  return config.outbounds.find(o => o && o.tag === tag)
 }
 
-function ensureArray(obj, key) {
-  if (!Array.isArray(obj[key])) {
-    obj[key] = []
+function ensureOutbounds(group) {
+  if (!Array.isArray(group.outbounds)) {
+    group.outbounds = []
   }
 }
 
-function mergeTags(base, extra) {
-  return unique([
-    ...base.filter(Boolean),
-    ...extra.filter(Boolean)
-  ])
-}
-
-function unique(arr) {
-  return [...new Set(arr)]
-}
-
-function dedupeByTag(arr) {
-  const seen = new Set()
-  for (let i = arr.length - 1; i >= 0; i--) {
-    const tag = arr[i]?.tag
-    if (!tag) continue
-    if (seen.has(tag)) {
-      arr.splice(i, 1)
-    } else {
-      seen.add(tag)
-    }
-  }
-}
-
-function ensureDirectOutbound(config, tag) {
-  if (!config.outbounds.some(o => o?.tag === tag)) {
+function ensureCompatible(config) {
+  if (!config.outbounds.some(o => o && o.tag === 'COMPATIBLE')) {
     config.outbounds.push({
-      tag,
-      type: 'direct'
+      tag: 'COMPATIBLE',
+      type: 'direct',
     })
+  }
+}
+
+function dedupeByTag(list) {
+  const seen = new Set()
+  const result = []
+
+  for (const item of list) {
+    if (!item || !item.tag) continue
+
+    if (seen.has(item.tag)) {
+      log(`⚠️ 跳过重复 tag：${item.tag}`)
+      continue
+    }
+
+    seen.add(item.tag)
+    result.push(item)
+  }
+
+  return result
+}
+
+function fixRuleSetReferences(config) {
+  if (!config.route) return
+  if (!Array.isArray(config.route.rules)) return
+  if (!Array.isArray(config.route.rule_set)) return
+
+  const exists = new Set(
+    config.route.rule_set
+      .filter(r => r && r.tag)
+      .map(r => r.tag)
+  )
+
+  config.route.rules = config.route.rules.filter(rule => {
+    if (!rule) return false
+
+    if (!rule.rule_set) return true
+
+    if (Array.isArray(rule.rule_set)) {
+      rule.rule_set = rule.rule_set.filter(tag => exists.has(tag))
+      return rule.rule_set.length > 0 || rule.action || rule.outbound || rule.server
+    }
+
+    if (typeof rule.rule_set === 'string') {
+      if (!exists.has(rule.rule_set)) {
+        delete rule.rule_set
+      }
+    }
+
+    return Object.keys(rule).length > 0
+  })
+}
+
+function checkMomoInbounds(config) {
+  if (!Array.isArray(config.inbounds)) {
+    throw new Error(`模板缺少 inbounds`)
+  }
+
+  const tags = new Set(
+    config.inbounds
+      .filter(i => i && i.tag)
+      .map(i => i.tag)
+  )
+
+  const required = [
+    'dns-in',
+    'redirect-in',
+    'tproxy-in',
+    'tun-in',
+  ]
+
+  for (const tag of required) {
+    if (!tags.has(tag)) {
+      throw new Error(`momo 模板缺少必要 inbound：${tag}`)
+    }
   }
 }
 
