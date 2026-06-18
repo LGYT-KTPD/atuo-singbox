@@ -146,6 +146,8 @@ if (Array.isArray(config.inbounds)) {
     if (i?.type === 'tun' && i?.tag === 'tun-in') {
       return {
         ...i,
+        stack: 'system',
+        strict_route: true,
         dns_mode: 'hijack',
         dns_address: '172.19.0.2'
       }
@@ -169,7 +171,6 @@ config.dns.rules = config.dns.rules
     return r
   })
 
-// 删除旧 query_type reject，下面统一重建
 config.dns.rules = config.dns.rules.filter(r => {
   if (
     Array.isArray(r?.query_type) &&
@@ -183,7 +184,6 @@ config.dns.rules = config.dns.rules.filter(r => {
   return true
 })
 
-// 局部 FakeIP：Google / YouTube / GV
 config.dns.rules.unshift({
   domain_suffix: [
     'google.com',
@@ -205,7 +205,6 @@ config.dns.rules.unshift({
   server: 'fakeip'
 })
 
-// 局部 FakeIP：Telegram
 config.dns.rules.splice(1, 0, {
   domain_suffix: [
     'telegram.org',
@@ -217,7 +216,6 @@ config.dns.rules.splice(1, 0, {
   server: 'fakeip'
 })
 
-// 局部 FakeIP：GitHub
 config.dns.rules.splice(2, 0, {
   domain_suffix: [
     'github.com',
@@ -231,7 +229,6 @@ config.dns.rules.splice(2, 0, {
   server: 'fakeip'
 })
 
-// 局部 FakeIP：OpenAI / ChatGPT
 config.dns.rules.splice(3, 0, {
   domain_suffix: [
     'openai.com',
@@ -246,7 +243,6 @@ config.dns.rules.splice(3, 0, {
   server: 'fakeip'
 })
 
-// DNS 噪音 reject
 config.dns.rules.splice(4, 0, {
   query_type: [
     'SVCB',
@@ -270,10 +266,8 @@ if (Array.isArray(config.route.rules)) {
   )
 }
 
-// route.rules
 if (!Array.isArray(config.route.rules)) config.route.rules = []
 
-// 删除旧 fakeip 路由，下面重建
 config.route.rules = config.route.rules.filter(r => {
   if (
     Array.isArray(r?.ip_cidr) &&
@@ -284,13 +278,44 @@ config.route.rules = config.route.rules.filter(r => {
   return true
 })
 
-// FakeIP 必须走 Proxy
 config.route.rules.splice(1, 0, {
   ip_cidr: [
     '198.18.0.0/15'
   ],
   outbound: 'Proxy'
 })
+
+// Apple 服务直连
+const appleDirectDomains = [
+  'apple.com',
+  'icloud.com',
+  'apple-dns.net',
+  'push.apple.com',
+  'itunes.apple.com',
+  'mzstatic.com',
+  'apps.apple.com',
+  'appstore.com'
+]
+
+config.route.rules = config.route.rules.filter(r => {
+  const ds = Array.isArray(r?.domain_suffix)
+    ? r.domain_suffix
+    : (typeof r?.domain_suffix === 'string' ? [r.domain_suffix] : [])
+
+  return !(r?.outbound === 'direct' && ds.some(d => appleDirectDomains.includes(d)))
+})
+
+const privateRuleIndex = config.route.rules.findIndex(r => r?.ip_is_private === true)
+const appleDirectRule = {
+  domain_suffix: appleDirectDomains,
+  outbound: 'direct'
+}
+
+if (privateRuleIndex >= 0) {
+  config.route.rules.splice(privateRuleIndex, 0, appleDirectRule)
+} else {
+  config.route.rules.push(appleDirectRule)
+}
 
 // rule-set 修正
 if (Array.isArray(config.route.rule_set)) {
@@ -349,7 +374,6 @@ if (proxyTags.length === 0) {
   throw new Error('没有获取到代理节点，无法生成 Proxy 组')
 }
 
-// 避免重复注入旧节点
 config.outbounds = config.outbounds.filter(o => {
   if (!o?.tag) return true
   if (o.tag === 'Proxy') return true
@@ -359,7 +383,6 @@ config.outbounds = config.outbounds.filter(o => {
 
 config.outbounds.push(...proxies)
 
-// 修复 Proxy 组
 let proxyGroup = config.outbounds.find(o =>
   o?.tag === 'Proxy' &&
   o?.type === 'selector'
@@ -382,7 +405,6 @@ proxyGroup.outbounds = dedupe([
 
 proxyGroup.default = proxyTags[0] || 'direct'
 
-// 确保 direct 存在
 if (!config.outbounds.some(o => o?.tag === 'direct')) {
   config.outbounds.push({
     type: 'direct',
@@ -390,7 +412,6 @@ if (!config.outbounds.some(o => o?.tag === 'direct')) {
   })
 }
 
-// 删除 auto 旧组
 config.outbounds = config.outbounds.filter(o => o?.tag !== 'auto')
 
 // 校验
