@@ -288,6 +288,19 @@
         "outbound": "direct"
       },
       {
+        "domain_suffix": [
+          "apple.com",
+          "icloud.com",
+          "apple-dns.net",
+          "push.apple.com",
+          "itunes.apple.com",
+          "mzstatic.com",
+          "apps.apple.com",
+          "appstore.com"
+        ],
+        "outbound": "direct"
+      },
+      {
         "ip_is_private": true,
         "outbound": "direct"
       },
