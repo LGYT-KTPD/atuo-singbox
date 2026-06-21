@@ -168,9 +168,12 @@
     "final": "proxy-dns",
     "strategy": "prefer_ipv4",
     "timeout": "3s",
-    "cache_capacity": 32768,
+    "cache_capacity": 65536,
     "reverse_mapping": true,
-    "optimistic": true
+    "optimistic": {
+      "enabled": true,
+      "timeout": "1h0m0s"
+    }
   },
   "endpoints": [
     {
@@ -284,6 +287,19 @@
         "action": "reject"
       },
       {
+        "domain_suffix": [
+          "apple.com",
+          "icloud.com",
+          "apple-dns.net",
+          "push.apple.com",
+          "itunes.apple.com",
+          "mzstatic.com",
+          "apps.apple.com",
+          "appstore.com"
+        ],
+        "outbound": "direct"
+      },
+      {
         "ip_is_private": true,
         "outbound": "direct"
       },
@@ -328,7 +344,8 @@
   },
   "http_clients": [
     {
-      "tag": "direct"
+      "tag": "direct",
+      "version": 2
     }
   ]
 }
