@@ -1,5 +1,5 @@
 // iPhone / Mac sing-box 1.14-alpha：自建少节点 no-home
-// 融合 alpha.24 优点 + 局部 FakeIP 增强版
+// Partial FakeIP 增强版 + alpha.33 小幅吸收版
 
 console.log('🚀 开始生成 no-home 配置（Partial FakeIP 增强版）')
 
@@ -11,26 +11,11 @@ let config = parser.parse($content ?? $files[0])
 
 function removeDnsRuleStrategy(rule) {
   if (!rule || typeof rule !== 'object') return rule
-
   delete rule.strategy
-
   if (Array.isArray(rule.rules)) {
     rule.rules = rule.rules.map(removeDnsRuleStrategy)
   }
-
   return rule
-}
-
-function upsertByTag(arr, item) {
-  const index = arr.findIndex(x => x?.tag === item.tag)
-  if (index >= 0) {
-    arr[index] = {
-      ...arr[index],
-      ...item
-    }
-  } else {
-    arr.push(item)
-  }
 }
 
 function dedupe(arr) {
@@ -43,7 +28,6 @@ if (config.experimental?.clash_api?.external_ui_http_client) {
 
 if (!config.experimental) config.experimental = {}
 if (!config.experimental.cache_file) config.experimental.cache_file = {}
-
 if (!config.dns) config.dns = {}
 if (!config.route) config.route = {}
 
@@ -60,15 +44,19 @@ config.experimental.cache_file.store_fakeip = true
 // DNS 全局增强
 config.dns.timeout = '3s'
 config.dns.strategy = 'prefer_ipv4'
-config.dns.cache_capacity = 32768
+config.dns.cache_capacity = 65536
 config.dns.reverse_mapping = true
-config.dns.optimistic = true
+config.dns.optimistic = {
+  enabled: true,
+  timeout: '1h0m0s'
+}
 config.dns.final = 'proxy-dns'
 
-// 1.14 启动下载解耦
+// http client v2
 config.http_clients = config.http_clients.filter(c => c?.tag !== 'direct')
 config.http_clients.unshift({
-  tag: 'direct'
+  tag: 'direct',
+  version: 2
 })
 
 config.route.default_http_client = 'direct'
@@ -94,27 +82,15 @@ config.dns.servers.unshift(
     type: 'hosts',
     tag: 'hosts-fix',
     predefined: {
-      'dns.google': [
-        '8.8.8.8',
-        '8.8.4.4'
-      ],
-      'dns.alidns.com': [
-        '223.5.5.5',
-        '223.6.6.6'
-      ],
-      'cloudflare-dns.com': [
-        '104.16.248.249',
-        '104.16.249.249'
-      ]
+      'dns.google': ['8.8.8.8', '8.8.4.4'],
+      'dns.alidns.com': ['223.5.5.5', '223.6.6.6'],
+      'cloudflare-dns.com': ['104.16.248.249', '104.16.249.249']
     }
   },
   {
     type: 'local',
     tag: 'local',
-    neighbor_domain: [
-      '.local',
-      '.lan'
-    ]
+    neighbor_domain: ['.local', '.lan']
   },
   {
     type: 'mdns',
@@ -140,17 +116,27 @@ config.dns.servers.unshift(
   }
 )
 
-// tun-in DNS hijack
+// tun-in：保留 TUN，删除 platform.http_proxy，避免 TUN + 系统 HTTP 代理叠加
 if (Array.isArray(config.inbounds)) {
   config.inbounds = config.inbounds.map(i => {
     if (i?.type === 'tun' && i?.tag === 'tun-in') {
-      return {
+      const tun = {
         ...i,
         stack: 'system',
+        auto_route: true,
         strict_route: true,
         dns_mode: 'hijack',
         dns_address: '172.19.0.2'
       }
+
+      if (tun.platform?.http_proxy) {
+        delete tun.platform.http_proxy
+      }
+      if (tun.platform && Object.keys(tun.platform).length === 0) {
+        delete tun.platform
+      }
+
+      return tun
     }
     return i
   })
@@ -184,6 +170,7 @@ config.dns.rules = config.dns.rules.filter(r => {
   return true
 })
 
+// 局部 FakeIP：Google / YouTube / GV
 config.dns.rules.unshift({
   domain_suffix: [
     'google.com',
@@ -205,6 +192,7 @@ config.dns.rules.unshift({
   server: 'fakeip'
 })
 
+// 局部 FakeIP：Telegram
 config.dns.rules.splice(1, 0, {
   domain_suffix: [
     'telegram.org',
@@ -216,6 +204,7 @@ config.dns.rules.splice(1, 0, {
   server: 'fakeip'
 })
 
+// 局部 FakeIP：GitHub
 config.dns.rules.splice(2, 0, {
   domain_suffix: [
     'github.com',
@@ -229,6 +218,7 @@ config.dns.rules.splice(2, 0, {
   server: 'fakeip'
 })
 
+// 局部 FakeIP：OpenAI / ChatGPT
 config.dns.rules.splice(3, 0, {
   domain_suffix: [
     'openai.com',
@@ -243,6 +233,7 @@ config.dns.rules.splice(3, 0, {
   server: 'fakeip'
 })
 
+// DNS 噪音 reject
 config.dns.rules.splice(4, 0, {
   query_type: [
     'SVCB',
@@ -268,6 +259,7 @@ if (Array.isArray(config.route.rules)) {
 
 if (!Array.isArray(config.route.rules)) config.route.rules = []
 
+// 删除旧 fakeip 路由，下面重建
 config.route.rules = config.route.rules.filter(r => {
   if (
     Array.isArray(r?.ip_cidr) &&
@@ -278,10 +270,9 @@ config.route.rules = config.route.rules.filter(r => {
   return true
 })
 
+// FakeIP 必须走 Proxy
 config.route.rules.splice(1, 0, {
-  ip_cidr: [
-    '198.18.0.0/15'
-  ],
+  ip_cidr: ['198.18.0.0/15'],
   outbound: 'Proxy'
 })
 
@@ -374,6 +365,7 @@ if (proxyTags.length === 0) {
   throw new Error('没有获取到代理节点，无法生成 Proxy 组')
 }
 
+// 避免重复注入旧节点
 config.outbounds = config.outbounds.filter(o => {
   if (!o?.tag) return true
   if (o.tag === 'Proxy') return true
@@ -383,6 +375,7 @@ config.outbounds = config.outbounds.filter(o => {
 
 config.outbounds.push(...proxies)
 
+// 修复 Proxy 组
 let proxyGroup = config.outbounds.find(o =>
   o?.tag === 'Proxy' &&
   o?.type === 'selector'
@@ -405,6 +398,7 @@ proxyGroup.outbounds = dedupe([
 
 proxyGroup.default = proxyTags[0] || 'direct'
 
+// 确保 direct 存在
 if (!config.outbounds.some(o => o?.tag === 'direct')) {
   config.outbounds.push({
     type: 'direct',
@@ -412,6 +406,7 @@ if (!config.outbounds.some(o => o?.tag === 'direct')) {
   })
 }
 
+// 删除 auto 旧组
 config.outbounds = config.outbounds.filter(o => o?.tag !== 'auto')
 
 // 校验
@@ -446,4 +441,4 @@ if (!fakeipRoute) {
 
 $content = JSON.stringify(config, null, 2)
 
-console.log('✅ 完成 no-home 配置生成（Partial FakeIP 增强版）')
+console.log('✅ 完成 no-home 配置生成（Partial FakeIP 增强版 + alpha.33 小幅吸收版）')
