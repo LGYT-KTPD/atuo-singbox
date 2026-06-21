@@ -187,8 +187,11 @@
     "strategy": "prefer_ipv4",
     "final": "proxy-dns",
     "timeout": "3s",
-    "cache_capacity": 32768,
-    "optimistic": true
+    "cache_capacity": 65536,
+    "optimistic": {
+      "enabled": true,
+      "timeout": "1h0m0s"
+    }
   },
   "inbounds": [
     {
@@ -202,14 +205,7 @@
       "auto_route": true,
       "strict_route": true,
       "dns_mode": "hijack",
-      "dns_address": "172.19.0.2",
-      "platform": {
-        "http_proxy": {
-          "enabled": true,
-          "server": "127.0.0.1",
-          "server_port": 7890
-        }
-      }
+      "dns_address": "172.19.0.2"
     },
     {
       "tag": "mixed-in",
@@ -580,6 +576,19 @@
         "outbound": "direct"
       },
       {
+        "domain_suffix": [
+          "apple.com",
+          "icloud.com",
+          "apple-dns.net",
+          "push.apple.com",
+          "itunes.apple.com",
+          "mzstatic.com",
+          "apps.apple.com",
+          "appstore.com"
+        ],
+        "outbound": "direct"
+      },
+      {
         "ip_is_private": true,
         "outbound": "direct"
       },
@@ -867,7 +876,8 @@
   },
   "http_clients": [
     {
-      "tag": "direct"
+      "tag": "direct",
+      "version": 2
     }
   ]
 }
