@@ -1,7 +1,7 @@
 // iPhone / Mac sing-box 1.14-alpha：机场多分组多节点 no-home
-// 融合 alpha.24 优点 + 局部 FakeIP + 每个 selector 默认选项
+// alpha.33 小幅吸收版：删除 platform.http_proxy + http_clients v2 + optimistic 对象 + cache_capacity 65536 + Apple direct
 
-console.log('🚀 开始生成多分组 no-home 配置（Partial FakeIP 增强版）')
+console.log('🚀 开始生成多分组 no-home 配置（Partial FakeIP 增强版 + alpha.33 小幅吸收版）')
 
 let { type, name, outbound, includeUnsupportedProxy, url } = $arguments
 type = /^1$|col|组合/i.test(type) ? 'collection' : 'subscription'
@@ -93,15 +93,19 @@ config.experimental.cache_file.store_fakeip = true
 // DNS 全局增强
 config.dns.timeout = '3s'
 config.dns.strategy = 'prefer_ipv4'
-config.dns.cache_capacity = 32768
+config.dns.cache_capacity = 65536
 config.dns.reverse_mapping = true
-config.dns.optimistic = true
+config.dns.optimistic = {
+  enabled: true,
+  timeout: '1h0m0s'
+}
 config.dns.final = 'proxy-dns'
 
 // 1.14 启动下载解耦
 config.http_clients = config.http_clients.filter(c => c?.tag !== 'direct')
 config.http_clients.unshift({
-  tag: 'direct'
+  tag: 'direct',
+  version: 2
 })
 
 config.route.default_http_client = 'direct'
@@ -173,16 +177,30 @@ config.dns.servers.unshift(
   }
 )
 
-// tun-in DNS hijack
+// tun-in DNS hijack，并删除 platform.http_proxy，避免 TUN + 系统 HTTP 代理叠加
 if (Array.isArray(config.inbounds)) {
   config.inbounds = config.inbounds.map(i => {
     if (i?.type === 'tun' && i?.tag === 'tun-in') {
-      return {
+      const tun = {
         ...i,
+        stack: 'system',
+        auto_route: true,
+        strict_route: true,
         dns_mode: 'hijack',
         dns_address: '172.19.0.2'
       }
+
+      if (tun.platform?.http_proxy) {
+        delete tun.platform.http_proxy
+      }
+
+      if (tun.platform && Object.keys(tun.platform).length === 0) {
+        delete tun.platform
+      }
+
+      return tun
     }
+
     return i
   })
 }
@@ -324,6 +342,40 @@ config.route.rules.splice(1, 0, {
   ],
   outbound: 'Proxy'
 })
+
+// Apple 服务直连：放在 ip_is_private 之前
+const appleDirectDomains = [
+  'apple.com',
+  'icloud.com',
+  'apple-dns.net',
+  'push.apple.com',
+  'itunes.apple.com',
+  'mzstatic.com',
+  'apps.apple.com',
+  'appstore.com'
+]
+
+config.route.rules = config.route.rules.filter(r => {
+  const ds = Array.isArray(r?.domain_suffix)
+    ? r.domain_suffix
+    : (typeof r?.domain_suffix === 'string' ? [r.domain_suffix] : [])
+
+  return !(r?.outbound === 'direct' &&
+    ds.some(d => appleDirectDomains.includes(d)))
+})
+
+const privateRuleIndex = config.route.rules.findIndex(r => r?.ip_is_private === true)
+
+const appleDirectRule = {
+  domain_suffix: appleDirectDomains,
+  outbound: 'direct'
+}
+
+if (privateRuleIndex >= 0) {
+  config.route.rules.splice(privateRuleIndex, 0, appleDirectRule)
+} else {
+  config.route.rules.push(appleDirectRule)
+}
 
 // rule-set 修正
 if (Array.isArray(config.route.rule_set)) {
@@ -589,4 +641,4 @@ if (!fakeipRoute) {
 
 $content = JSON.stringify(config, null, 2)
 
-console.log('✅ 完成多分组 no-home 配置生成（Partial FakeIP 增强版）')
+console.log('✅ 完成多分组 no-home 配置生成（Partial FakeIP 增强版 + alpha.33 小幅吸收版）')
