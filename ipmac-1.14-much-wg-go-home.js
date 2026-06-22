@@ -1,7 +1,7 @@
 // iPhone / Mac sing-box 1.14-alpha：WireGuard endpoint 回家 + 机场多分组节点注入
-// alpha.33 小幅吸收版：删除 platform.http_proxy + http_clients v2 + optimistic 对象 + cache_capacity 65536 + Apple direct
+// 无 FakeIP 稳定版：DoT + DNS Hijack + Sniff + Apple Direct 扩大 + endpoint_independent_nat
 
-console.log('🚀 开始生成 WG 多分组回家配置（Partial FakeIP 增强版 + alpha.33 小幅吸收版）')
+console.log('🚀 开始生成 WG 多分组回家配置（No FakeIP 稳定版）')
 
 let { type, name, outbound, includeUnsupportedProxy, url } = $arguments
 type = /^1$|col|组合/i.test(type) ? 'collection' : 'subscription'
@@ -62,18 +62,6 @@ function removeDnsRuleStrategy(rule) {
 
 function dedupe(arr) {
   return [...new Set((arr || []).filter(Boolean))]
-}
-
-function upsertByTag(arr, item) {
-  const index = arr.findIndex(x => x?.tag === item.tag)
-  if (index >= 0) {
-    arr[index] = {
-      ...arr[index],
-      ...item
-    }
-  } else {
-    arr.push(item)
-  }
 }
 
 function removeByTags(arr, tags) {
@@ -141,18 +129,15 @@ if (!config.route) config.route = {}
 
 if (!Array.isArray(config.dns.servers)) config.dns.servers = []
 if (!Array.isArray(config.dns.rules)) config.dns.rules = []
-
 if (!Array.isArray(config.inbounds)) config.inbounds = []
 if (!Array.isArray(config.endpoints)) config.endpoints = []
 if (!Array.isArray(config.outbounds)) config.outbounds = []
 if (!Array.isArray(config.http_clients)) config.http_clients = []
 
-// experimental.cache_file 增强
 config.experimental.cache_file.enabled = true
 config.experimental.cache_file.store_dns = true
-config.experimental.cache_file.store_fakeip = true
+delete config.experimental.cache_file.store_fakeip
 
-// DNS 全局增强
 config.dns.timeout = '3s'
 config.dns.strategy = 'prefer_ipv4'
 config.dns.cache_capacity = 65536
@@ -163,7 +148,6 @@ config.dns.optimistic = {
 }
 config.dns.final = 'proxy-dns'
 
-// 1.14 启动下载解耦
 config.http_clients = config.http_clients.filter(c => c?.tag !== 'direct')
 config.http_clients.unshift({
   tag: 'direct',
@@ -173,7 +157,6 @@ config.http_clients.unshift({
 config.route.default_http_client = 'direct'
 config.route.default_domain_resolver = 'local-dns'
 
-// 重建关键 DNS servers，避免旧 google/local/public 命名混乱
 config.dns.servers = removeByTags(config.dns.servers, [
   'google',
   'local',
@@ -235,15 +218,9 @@ config.dns.servers.unshift(
     server_port: 853,
     domain_resolver: 'hosts-fix',
     detour: 'Proxy'
-  },
-  {
-    type: 'fakeip',
-    tag: 'fakeip',
-    inet4_range: '198.18.0.0/15'
   }
 )
 
-// tun-in 使用 DNS hijack，并删除 platform.http_proxy，避免 TUN + 系统 HTTP 代理叠加
 config.inbounds = config.inbounds.map(i => {
   if (i?.type === 'tun' && i?.tag === 'tun-in') {
     const tun = {
@@ -252,7 +229,8 @@ config.inbounds = config.inbounds.map(i => {
       auto_route: true,
       strict_route: true,
       dns_mode: 'hijack',
-      dns_address: '172.19.0.2'
+      dns_address: '172.19.0.2',
+      endpoint_independent_nat: true
     }
 
     if (tun.platform?.http_proxy) {
@@ -269,7 +247,6 @@ config.inbounds = config.inbounds.map(i => {
   return i
 })
 
-// DNS rules 清理
 config.dns.rules = config.dns.rules
   .map(removeDnsRuleStrategy)
   .filter(r => {
@@ -283,7 +260,6 @@ config.dns.rules = config.dns.rules
     return r
   })
 
-// 去掉旧的内网域名规则和旧 qtype reject，下面统一重建
 config.dns.rules = config.dns.rules.filter(r => {
   if (
     Array.isArray(r?.domain_suffix) &&
@@ -306,7 +282,6 @@ config.dns.rules = config.dns.rules.filter(r => {
   return true
 })
 
-// 关键 DNS 规则：内网域名必须最前
 config.dns.rules.unshift({
   domain_suffix: [
     'ktpd.fun',
@@ -316,7 +291,6 @@ config.dns.rules.unshift({
   server: 'home-dns'
 })
 
-// 局部 FakeIP：Google / YouTube / GV
 config.dns.rules.splice(1, 0, {
   domain_suffix: [
     'google.com',
@@ -335,10 +309,9 @@ config.dns.rules.splice(1, 0, {
     'hangouts.google.com'
   ],
   action: 'route',
-  server: 'fakeip'
+  server: 'proxy-dns'
 })
 
-// 局部 FakeIP：Telegram
 config.dns.rules.splice(2, 0, {
   domain_suffix: [
     'telegram.org',
@@ -347,10 +320,9 @@ config.dns.rules.splice(2, 0, {
     'telegra.ph'
   ],
   action: 'route',
-  server: 'fakeip'
+  server: 'proxy-dns'
 })
 
-// 局部 FakeIP：GitHub
 config.dns.rules.splice(3, 0, {
   domain_suffix: [
     'github.com',
@@ -361,10 +333,9 @@ config.dns.rules.splice(3, 0, {
     'objects.githubusercontent.com'
   ],
   action: 'route',
-  server: 'fakeip'
+  server: 'proxy-dns'
 })
 
-// 局部 FakeIP：OpenAI / ChatGPT
 config.dns.rules.splice(4, 0, {
   domain_suffix: [
     'openai.com',
@@ -376,10 +347,9 @@ config.dns.rules.splice(4, 0, {
     'api.openai.com'
   ],
   action: 'route',
-  server: 'fakeip'
+  server: 'proxy-dns'
 })
 
-// DNS 噪音 reject
 config.dns.rules.splice(5, 0, {
   query_type: [
     'SVCB',
@@ -389,7 +359,6 @@ config.dns.rules.splice(5, 0, {
   action: 'reject'
 })
 
-// 获取代理节点
 let proxies = url
   ? await produceArtifact({
       name,
@@ -421,7 +390,6 @@ if (proxyTags.length === 0) {
   throw new Error('没有获取到代理节点')
 }
 
-// 注入 WG endpoint
 const wgEndpoint = {
   type: 'wireguard',
   tag: 'wg-home',
@@ -454,7 +422,6 @@ if (!wgReplaced) {
   config.endpoints.unshift(wgEndpoint)
 }
 
-// 清理旧 home 占位 outbound，避免混进 Proxy
 config.outbounds = config.outbounds.filter(o => {
   if (!o?.tag) return true
   if (o.tag === '__HOME_PLACEHOLDER__') return false
@@ -462,7 +429,6 @@ config.outbounds = config.outbounds.filter(o => {
   return true
 })
 
-// 注入代理节点
 config.outbounds = config.outbounds.filter(o => {
   if (!o?.tag) return true
   if (o.tag === 'Proxy') return true
@@ -503,7 +469,6 @@ config.outbounds = config.outbounds.filter(o => {
 
 config.outbounds.push(...proxies)
 
-// 多分组注入
 const outboundRules = (outbound || '')
   .split('🕳')
   .filter(Boolean)
@@ -530,7 +495,6 @@ config.outbounds.forEach(o => {
   })
 })
 
-// 确保 direct 存在
 if (!config.outbounds.some(o => o?.tag === 'direct')) {
   config.outbounds.push({
     type: 'direct',
@@ -538,7 +502,6 @@ if (!config.outbounds.some(o => o?.tag === 'direct')) {
   })
 }
 
-// Proxy 组：只放机场节点 + direct，不放 wg-home
 let proxyGroup = config.outbounds.find(
   o => o?.tag === 'Proxy' && o?.type === 'selector'
 )
@@ -559,7 +522,6 @@ proxyGroup.outbounds = dedupe([
   'direct'
 ])
 
-// 空组兜底
 const compatibleOutbound = {
   tag: 'COMPATIBLE',
   type: 'direct'
@@ -589,7 +551,6 @@ config.outbounds.forEach(o => {
   }
 })
 
-// 每个 selector 设置默认值
 const selectorDefaults = {
   Proxy: 'auto',
   OpenAI: 'America',
@@ -615,7 +576,6 @@ Object.entries(selectorDefaults).forEach(([tag, preferred]) => {
   setSelectorDefault(tag, preferred)
 })
 
-// 若某些 selector 不在上面的默认表，也自动设置第一个可用出站为 default
 config.outbounds.forEach(o => {
   if (o?.type !== 'selector') return
   if (!Array.isArray(o.outbounds)) o.outbounds = []
@@ -627,14 +587,22 @@ config.outbounds.forEach(o => {
   }
 })
 
-// route.rules
 if (!Array.isArray(config.route.rules)) config.route.rules = []
 
 config.route.rules = config.route.rules.map(normalizeRouteRule)
 
+config.route.rules = config.route.rules.filter(r => {
+  if (
+    Array.isArray(r?.ip_cidr) &&
+    r.ip_cidr.includes('198.18.0.0/15')
+  ) {
+    return false
+  }
+  return true
+})
+
 const homeCIDRs = envList('WG_HOME_CIDRS', '192.168.1.0/24')
 
-// WG 内网路由
 config.route.rules = config.route.rules.map(r => {
   if (r?.outbound === 'wg-home') {
     return {
@@ -652,7 +620,6 @@ if (!config.route.rules.some(r => r?.outbound === 'wg-home')) {
   })
 }
 
-// Apple 服务直连：放在 ip_is_private 之前
 const appleDirectDomains = [
   'apple.com',
   'icloud.com',
@@ -661,7 +628,11 @@ const appleDirectDomains = [
   'itunes.apple.com',
   'mzstatic.com',
   'apps.apple.com',
-  'appstore.com'
+  'appstore.com',
+  'aaplimg.com',
+  'cdn-apple.com',
+  'me.com',
+  'mac.com'
 ]
 
 config.route.rules = config.route.rules.filter(r => {
@@ -686,25 +657,6 @@ if (privateRuleIndex >= 0) {
   config.route.rules.push(appleDirectRule)
 }
 
-// FakeIP 必须走 Proxy
-const hasFakeIpRoute = config.route.rules.some(r =>
-  Array.isArray(r?.ip_cidr) &&
-  r.ip_cidr.includes('198.18.0.0/15') &&
-  r.outbound === 'Proxy'
-)
-
-if (!hasFakeIpRoute) {
-  const wgIndex = config.route.rules.findIndex(r => r?.outbound === 'wg-home')
-
-  config.route.rules.splice(wgIndex >= 0 ? wgIndex + 1 : 4, 0, {
-    ip_cidr: [
-      '198.18.0.0/15'
-    ],
-    outbound: 'Proxy'
-  })
-}
-
-// rule-set 修正
 if (Array.isArray(config.route.rule_set)) {
   config.route.rule_set = config.route.rule_set.map(rs => {
     if (rs?.type === 'remote' && typeof rs.url === 'string') {
@@ -730,7 +682,6 @@ if (Array.isArray(config.route.rule_set)) {
   })
 }
 
-// 基础校验
 if (!config.endpoints.some(e => e?.tag === 'wg-home' && e?.type === 'wireguard')) {
   throw new Error('最终配置缺少 wireguard endpoint: wg-home')
 }
@@ -754,21 +705,6 @@ if (!localDns) {
   throw new Error('缺少 local-dns，route.default_domain_resolver 会失效')
 }
 
-const fakeipDns = config.dns?.servers?.find(s => s?.tag === 'fakeip')
-if (!fakeipDns) {
-  throw new Error('缺少 fakeip DNS server')
-}
-
-const fakeipRoute = config.route.rules.find(r =>
-  Array.isArray(r?.ip_cidr) &&
-  r.ip_cidr.includes('198.18.0.0/15') &&
-  r.outbound === 'Proxy'
-)
-
-if (!fakeipRoute) {
-  throw new Error('缺少 FakeIP 路由：198.18.0.0/15 -> Proxy')
-}
-
 $content = JSON.stringify(config, null, 2)
 
-console.log('✅ 完成 WG 多分组回家配置生成（Partial FakeIP 增强版 + alpha.33 小幅吸收版）')
+console.log('✅ 完成 WG 多分组回家配置生成（No FakeIP 稳定版）')
