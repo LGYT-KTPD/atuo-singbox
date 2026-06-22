@@ -1,7 +1,7 @@
 // iPhone / Mac sing-box 1.14-alpha：自建少节点 no-home
-// Partial FakeIP 增强版 + alpha.33 小幅吸收版
+// 无 FakeIP 稳定版：DoT + DNS Hijack + Sniff + Apple Direct + endpoint_independent_nat
 
-console.log('🚀 开始生成 no-home 配置（Partial FakeIP 增强版）')
+console.log('🚀 开始生成 no-home 配置（No FakeIP 稳定版）')
 
 let { type, name, includeUnsupportedProxy, url } = $arguments
 type = /^1$|col|组合/i.test(type) ? 'collection' : 'subscription'
@@ -36,10 +36,10 @@ if (!Array.isArray(config.dns.rules)) config.dns.rules = []
 if (!Array.isArray(config.outbounds)) config.outbounds = []
 if (!Array.isArray(config.http_clients)) config.http_clients = []
 
-// cache_file
+// cache_file：无 FakeIP，只保留 DNS 缓存
 config.experimental.cache_file.enabled = true
 config.experimental.cache_file.store_dns = true
-config.experimental.cache_file.store_fakeip = true
+delete config.experimental.cache_file.store_fakeip
 
 // DNS 全局增强
 config.dns.timeout = '3s'
@@ -62,7 +62,7 @@ config.http_clients.unshift({
 config.route.default_http_client = 'direct'
 config.route.default_domain_resolver = 'local-dns'
 
-// DNS servers
+// DNS servers：完全移除 fakeip
 config.dns.servers = config.dns.servers.filter(s =>
   ![
     'google',
@@ -108,15 +108,10 @@ config.dns.servers.unshift(
     server_port: 853,
     domain_resolver: 'hosts-fix',
     detour: 'Proxy'
-  },
-  {
-    type: 'fakeip',
-    tag: 'fakeip',
-    inet4_range: '198.18.0.0/15'
   }
 )
 
-// tun-in：保留 TUN，删除 platform.http_proxy，避免 TUN + 系统 HTTP 代理叠加
+// tun-in：TUN + DNS hijack，删除 platform.http_proxy，增加 endpoint_independent_nat
 if (Array.isArray(config.inbounds)) {
   config.inbounds = config.inbounds.map(i => {
     if (i?.type === 'tun' && i?.tag === 'tun-in') {
@@ -126,23 +121,26 @@ if (Array.isArray(config.inbounds)) {
         auto_route: true,
         strict_route: true,
         dns_mode: 'hijack',
-        dns_address: '172.19.0.2'
+        dns_address: '172.19.0.2',
+        endpoint_independent_nat: true
       }
 
       if (tun.platform?.http_proxy) {
         delete tun.platform.http_proxy
       }
+
       if (tun.platform && Object.keys(tun.platform).length === 0) {
         delete tun.platform
       }
 
       return tun
     }
+
     return i
   })
 }
 
-// DNS rules 清理
+// DNS rules 清理：移除 fakeip / home-dns / 旧策略
 config.dns.rules = config.dns.rules
   .map(removeDnsRuleStrategy)
   .filter(r => {
@@ -157,6 +155,7 @@ config.dns.rules = config.dns.rules
     return r
   })
 
+// 删除旧 query_type reject，下面统一重建
 config.dns.rules = config.dns.rules.filter(r => {
   if (
     Array.isArray(r?.query_type) &&
@@ -170,7 +169,7 @@ config.dns.rules = config.dns.rules.filter(r => {
   return true
 })
 
-// 局部 FakeIP：Google / YouTube / GV
+// Google / YouTube / GV：走 proxy-dns，不再 fakeip
 config.dns.rules.unshift({
   domain_suffix: [
     'google.com',
@@ -189,10 +188,10 @@ config.dns.rules.unshift({
     'hangouts.google.com'
   ],
   action: 'route',
-  server: 'fakeip'
+  server: 'proxy-dns'
 })
 
-// 局部 FakeIP：Telegram
+// Telegram：走 proxy-dns
 config.dns.rules.splice(1, 0, {
   domain_suffix: [
     'telegram.org',
@@ -201,10 +200,10 @@ config.dns.rules.splice(1, 0, {
     'telegra.ph'
   ],
   action: 'route',
-  server: 'fakeip'
+  server: 'proxy-dns'
 })
 
-// 局部 FakeIP：GitHub
+// GitHub：走 proxy-dns
 config.dns.rules.splice(2, 0, {
   domain_suffix: [
     'github.com',
@@ -215,10 +214,10 @@ config.dns.rules.splice(2, 0, {
     'objects.githubusercontent.com'
   ],
   action: 'route',
-  server: 'fakeip'
+  server: 'proxy-dns'
 })
 
-// 局部 FakeIP：OpenAI / ChatGPT
+// OpenAI / ChatGPT：走 proxy-dns
 config.dns.rules.splice(3, 0, {
   domain_suffix: [
     'openai.com',
@@ -230,7 +229,7 @@ config.dns.rules.splice(3, 0, {
     'api.openai.com'
   ],
   action: 'route',
-  server: 'fakeip'
+  server: 'proxy-dns'
 })
 
 // DNS 噪音 reject
@@ -259,7 +258,7 @@ if (Array.isArray(config.route.rules)) {
 
 if (!Array.isArray(config.route.rules)) config.route.rules = []
 
-// 删除旧 fakeip 路由，下面重建
+// 删除旧 FakeIP 路由：198.18.0.0/15
 config.route.rules = config.route.rules.filter(r => {
   if (
     Array.isArray(r?.ip_cidr) &&
@@ -268,12 +267,6 @@ config.route.rules = config.route.rules.filter(r => {
     return false
   }
   return true
-})
-
-// FakeIP 必须走 Proxy
-config.route.rules.splice(1, 0, {
-  ip_cidr: ['198.18.0.0/15'],
-  outbound: 'Proxy'
 })
 
 // Apple 服务直连
@@ -424,21 +417,6 @@ if (!localDns) {
   throw new Error('缺少 local-dns，route.default_domain_resolver 会失效')
 }
 
-const fakeipDns = config.dns?.servers?.find(s => s?.tag === 'fakeip')
-if (!fakeipDns) {
-  throw new Error('缺少 fakeip DNS server')
-}
-
-const fakeipRoute = config.route.rules.find(r =>
-  Array.isArray(r?.ip_cidr) &&
-  r.ip_cidr.includes('198.18.0.0/15') &&
-  r.outbound === 'Proxy'
-)
-
-if (!fakeipRoute) {
-  throw new Error('缺少 FakeIP 路由：198.18.0.0/15 -> Proxy')
-}
-
 $content = JSON.stringify(config, null, 2)
 
-console.log('✅ 完成 no-home 配置生成（Partial FakeIP 增强版 + alpha.33 小幅吸收版）')
+console.log('✅ 完成 no-home 配置生成（No FakeIP 稳定版）')
