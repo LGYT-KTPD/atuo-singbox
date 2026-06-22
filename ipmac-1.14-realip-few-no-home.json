@@ -13,8 +13,7 @@
     },
     "cache_file": {
       "enabled": true,
-      "store_dns": true,
-      "store_fakeip": true
+      "store_dns": true
     }
   },
   "dns": {
@@ -61,11 +60,6 @@
         "server_port": 853,
         "domain_resolver": "hosts-fix",
         "detour": "Proxy"
-      },
-      {
-        "type": "fakeip",
-        "tag": "fakeip",
-        "inet4_range": "198.18.0.0/15"
       }
     ],
     "rules": [
@@ -87,7 +81,7 @@
           "hangouts.google.com"
         ],
         "action": "route",
-        "server": "fakeip"
+        "server": "proxy-dns"
       },
       {
         "domain_suffix": [
@@ -97,7 +91,7 @@
           "telegra.ph"
         ],
         "action": "route",
-        "server": "fakeip"
+        "server": "proxy-dns"
       },
       {
         "domain_suffix": [
@@ -109,7 +103,7 @@
           "objects.githubusercontent.com"
         ],
         "action": "route",
-        "server": "fakeip"
+        "server": "proxy-dns"
       },
       {
         "domain_suffix": [
@@ -122,7 +116,7 @@
           "api.openai.com"
         ],
         "action": "route",
-        "server": "fakeip"
+        "server": "proxy-dns"
       },
       {
         "query_type": [
@@ -188,7 +182,8 @@
       "auto_route": true,
       "strict_route": true,
       "dns_mode": "hijack",
-      "dns_address": "172.19.0.2"
+      "dns_address": "172.19.0.2",
+      "endpoint_independent_nat": true
     },
     {
       "tag": "mixed-in",
@@ -220,12 +215,6 @@
       {
         "ip_version": 6,
         "action": "reject"
-      },
-      {
-        "ip_cidr": [
-          "198.18.0.0/15"
-        ],
-        "outbound": "Proxy"
       },
       {
         "inbound": [
