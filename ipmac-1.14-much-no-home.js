@@ -1,7 +1,7 @@
 // iPhone / Mac sing-box 1.14-alpha：机场多分组多节点 no-home
-// alpha.33 小幅吸收版：删除 platform.http_proxy + http_clients v2 + optimistic 对象 + cache_capacity 65536 + Apple direct
+// 无 FakeIP 稳定版：DoT + DNS Hijack + Sniff + Apple Direct 扩大 + endpoint_independent_nat
 
-console.log('🚀 开始生成多分组 no-home 配置（Partial FakeIP 增强版 + alpha.33 小幅吸收版）')
+console.log('🚀 开始生成多分组 no-home 配置（No FakeIP 稳定版）')
 
 let { type, name, outbound, includeUnsupportedProxy, url } = $arguments
 type = /^1$|col|组合/i.test(type) ? 'collection' : 'subscription'
@@ -88,7 +88,7 @@ if (!Array.isArray(config.http_clients)) config.http_clients = []
 // cache_file
 config.experimental.cache_file.enabled = true
 config.experimental.cache_file.store_dns = true
-config.experimental.cache_file.store_fakeip = true
+delete config.experimental.cache_file.store_fakeip
 
 // DNS 全局增强
 config.dns.timeout = '3s'
@@ -169,11 +169,6 @@ config.dns.servers.unshift(
     server_port: 853,
     domain_resolver: 'hosts-fix',
     detour: 'Proxy'
-  },
-  {
-    type: 'fakeip',
-    tag: 'fakeip',
-    inet4_range: '198.18.0.0/15'
   }
 )
 
@@ -187,7 +182,8 @@ if (Array.isArray(config.inbounds)) {
         auto_route: true,
         strict_route: true,
         dns_mode: 'hijack',
-        dns_address: '172.19.0.2'
+        dns_address: '172.19.0.2',
+        endpoint_independent_nat: true
       }
 
       if (tun.platform?.http_proxy) {
@@ -234,7 +230,7 @@ config.dns.rules = config.dns.rules.filter(r => {
   return true
 })
 
-// 局部 FakeIP：Google / YouTube / GV
+// Google / YouTube / GV：走 proxy-dns
 config.dns.rules.unshift({
   domain_suffix: [
     'google.com',
@@ -253,10 +249,10 @@ config.dns.rules.unshift({
     'hangouts.google.com'
   ],
   action: 'route',
-  server: 'fakeip'
+  server: 'proxy-dns'
 })
 
-// 局部 FakeIP：Telegram
+// Telegram：走 proxy-dns
 config.dns.rules.splice(1, 0, {
   domain_suffix: [
     'telegram.org',
@@ -265,10 +261,10 @@ config.dns.rules.splice(1, 0, {
     'telegra.ph'
   ],
   action: 'route',
-  server: 'fakeip'
+  server: 'proxy-dns'
 })
 
-// 局部 FakeIP：GitHub
+// GitHub：走 proxy-dns
 config.dns.rules.splice(2, 0, {
   domain_suffix: [
     'github.com',
@@ -279,10 +275,10 @@ config.dns.rules.splice(2, 0, {
     'objects.githubusercontent.com'
   ],
   action: 'route',
-  server: 'fakeip'
+  server: 'proxy-dns'
 })
 
-// 局部 FakeIP：OpenAI / ChatGPT
+// OpenAI / ChatGPT：走 proxy-dns
 config.dns.rules.splice(3, 0, {
   domain_suffix: [
     'openai.com',
@@ -294,7 +290,7 @@ config.dns.rules.splice(3, 0, {
     'api.openai.com'
   ],
   action: 'route',
-  server: 'fakeip'
+  server: 'proxy-dns'
 })
 
 // DNS 噪音 reject
@@ -324,7 +320,7 @@ if (Array.isArray(config.route.rules)) {
 // route.rules
 if (!Array.isArray(config.route.rules)) config.route.rules = []
 
-// 删除旧 fakeip 路由，下面重建
+// 删除旧 FakeIP 路由：198.18.0.0/15
 config.route.rules = config.route.rules.filter(r => {
   if (
     Array.isArray(r?.ip_cidr) &&
@@ -333,14 +329,6 @@ config.route.rules = config.route.rules.filter(r => {
     return false
   }
   return true
-})
-
-// FakeIP 必须走 Proxy
-config.route.rules.splice(1, 0, {
-  ip_cidr: [
-    '198.18.0.0/15'
-  ],
-  outbound: 'Proxy'
 })
 
 // Apple 服务直连：放在 ip_is_private 之前
@@ -352,7 +340,11 @@ const appleDirectDomains = [
   'itunes.apple.com',
   'mzstatic.com',
   'apps.apple.com',
-  'appstore.com'
+  'appstore.com',
+  'aaplimg.com',
+  'cdn-apple.com',
+  'me.com',
+  'mac.com'
 ]
 
 config.route.rules = config.route.rules.filter(r => {
@@ -624,21 +616,6 @@ if (!localDns) {
   throw new Error('缺少 local-dns，route.default_domain_resolver 会失效')
 }
 
-const fakeipDns = config.dns?.servers?.find(s => s?.tag === 'fakeip')
-if (!fakeipDns) {
-  throw new Error('缺少 fakeip DNS server')
-}
-
-const fakeipRoute = config.route.rules.find(r =>
-  Array.isArray(r?.ip_cidr) &&
-  r.ip_cidr.includes('198.18.0.0/15') &&
-  r.outbound === 'Proxy'
-)
-
-if (!fakeipRoute) {
-  throw new Error('缺少 FakeIP 路由：198.18.0.0/15 -> Proxy')
-}
-
 $content = JSON.stringify(config, null, 2)
 
-console.log('✅ 完成多分组 no-home 配置生成（Partial FakeIP 增强版 + alpha.33 小幅吸收版）')
+console.log('✅ 完成多分组 no-home 配置生成（No FakeIP 稳定版）')
