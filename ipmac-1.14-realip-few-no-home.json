@@ -281,6 +281,9 @@
           "itunes.apple.com",
           "mzstatic.com",
           "apps.apple.com",
+          "cdn-apple.com",
+          "me.com",
+          "mac.com",
           "appstore.com"
         ],
         "outbound": "direct"
