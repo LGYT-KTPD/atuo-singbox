@@ -1,7 +1,7 @@
-// iPhone / Mac sing-box 1.14-alpha：WireGuard endpoint 回家 + 局部 FakeIP 增强版
-// alpha.33 小幅吸收版：删除 platform.http_proxy、http_clients v2、optimistic 对象、cache_capacity 65536、Apple direct
+// iPhone / Mac sing-box 1.14-alpha：WireGuard endpoint 回家
+// 无 FakeIP 稳定版：DoT + DNS Hijack + Sniff + Apple Direct 扩大 + endpoint_independent_nat
 
-console.log('🚀 开始生成 WireGuard + Partial FakeIP 配置')
+console.log('🚀 开始生成 WireGuard 回家配置（No FakeIP 稳定版）')
 
 let { type, name, includeUnsupportedProxy, url } = $arguments
 type = /^1$|col|组合/i.test(type) ? 'collection' : 'subscription'
@@ -101,10 +101,10 @@ if (!Array.isArray(config.endpoints)) config.endpoints = []
 if (!Array.isArray(config.outbounds)) config.outbounds = []
 if (!Array.isArray(config.http_clients)) config.http_clients = []
 
-// cache_file
+// cache_file：无 FakeIP，只保留 DNS 缓存
 config.experimental.cache_file.enabled = true
 config.experimental.cache_file.store_dns = true
-config.experimental.cache_file.store_fakeip = true
+delete config.experimental.cache_file.store_fakeip
 
 // DNS 全局优化
 config.dns.timeout = '3s'
@@ -128,6 +128,20 @@ config.route.default_http_client = 'direct'
 config.route.default_domain_resolver = 'local-dns'
 
 // DNS servers
+config.dns.servers = config.dns.servers.filter(s =>
+  ![
+    'google',
+    'public',
+    'hosts-fix',
+    'local',
+    'mdns-server',
+    'local-dns',
+    'home-dns',
+    'proxy-dns',
+    'fakeip'
+  ].includes(s?.tag)
+)
+
 upsertByTag(config.dns.servers, {
   type: 'hosts',
   tag: 'hosts-fix',
@@ -183,13 +197,7 @@ upsertByTag(config.dns.servers, {
   detour: 'Proxy'
 })
 
-upsertByTag(config.dns.servers, {
-  type: 'fakeip',
-  tag: 'fakeip',
-  inet4_range: '198.18.0.0/15'
-})
-
-// tun-in：保留 TUN，删除 platform.http_proxy，避免 TUN + 系统 HTTP 代理叠加
+// tun-in：TUN + DNS hijack，删除 platform.http_proxy，增加 endpoint_independent_nat
 if (Array.isArray(config.inbounds)) {
   config.inbounds = config.inbounds.map(i => {
     if (i?.type === 'tun' && i?.tag === 'tun-in') {
@@ -199,7 +207,8 @@ if (Array.isArray(config.inbounds)) {
         auto_route: true,
         strict_route: true,
         dns_mode: 'hijack',
-        dns_address: '172.19.0.2'
+        dns_address: '172.19.0.2',
+        endpoint_independent_nat: true
       }
 
       if (tun.platform?.http_proxy) {
@@ -217,7 +226,7 @@ if (Array.isArray(config.inbounds)) {
   })
 }
 
-// DNS rules 清理
+// DNS rules 清理：移除 fakeip / 旧策略
 config.dns.rules = config.dns.rules
   .map(removeDnsRuleStrategy)
   .filter(r => {
@@ -225,12 +234,18 @@ config.dns.rules = config.dns.rules
     if (r?.server === 'fakeip') return false
     return true
   })
+  .map(r => {
+    if (r?.server === 'local') return { ...r, server: 'local-dns' }
+    if (r?.server === 'google') return { ...r, server: 'proxy-dns' }
+    return r
+  })
 
-// 内网域名
+// 内网域名：走 home-dns
 config.dns.rules = config.dns.rules.filter(r => {
   const ds = Array.isArray(r?.domain_suffix)
     ? r.domain_suffix
     : (typeof r?.domain_suffix === 'string' ? [r.domain_suffix] : [])
+
   return !ds.includes('ktpd.fun') && !ds.includes('xwcac68u.top')
 })
 
@@ -254,10 +269,11 @@ config.dns.rules = config.dns.rules.filter(r => {
   ) {
     return false
   }
+
   return true
 })
 
-// Google / YouTube / GV
+// Google / YouTube / GV：走 proxy-dns，不再 fakeip
 config.dns.rules.push({
   domain_suffix: [
     'google.com',
@@ -276,10 +292,10 @@ config.dns.rules.push({
     'hangouts.google.com'
   ],
   action: 'route',
-  server: 'fakeip'
+  server: 'proxy-dns'
 })
 
-// Telegram
+// Telegram：走 proxy-dns
 config.dns.rules.push({
   domain_suffix: [
     'telegram.org',
@@ -288,10 +304,10 @@ config.dns.rules.push({
     'telegra.ph'
   ],
   action: 'route',
-  server: 'fakeip'
+  server: 'proxy-dns'
 })
 
-// GitHub
+// GitHub：走 proxy-dns
 config.dns.rules.push({
   domain_suffix: [
     'github.com',
@@ -302,10 +318,10 @@ config.dns.rules.push({
     'objects.githubusercontent.com'
   ],
   action: 'route',
-  server: 'fakeip'
+  server: 'proxy-dns'
 })
 
-// OpenAI / ChatGPT
+// OpenAI / ChatGPT：走 proxy-dns
 config.dns.rules.push({
   domain_suffix: [
     'openai.com',
@@ -317,7 +333,7 @@ config.dns.rules.push({
     'api.openai.com'
   ],
   action: 'route',
-  server: 'fakeip'
+  server: 'proxy-dns'
 })
 
 // DNS 噪音 reject
@@ -468,7 +484,7 @@ config.route.rules.splice(4, 0, {
   outbound: 'wg-home'
 })
 
-// 删除旧 FakeIP 路由，重建
+// 删除旧 FakeIP 路由：198.18.0.0/15
 config.route.rules = config.route.rules.filter(r => {
   if (
     Array.isArray(r?.ip_cidr) &&
@@ -476,17 +492,11 @@ config.route.rules = config.route.rules.filter(r => {
   ) {
     return false
   }
+
   return true
 })
 
-config.route.rules.splice(5, 0, {
-  ip_cidr: [
-    '198.18.0.0/15'
-  ],
-  outbound: 'Proxy'
-})
-
-// Apple 服务直连
+// Apple 服务直连：扩大范围
 const appleDirectDomains = [
   'apple.com',
   'icloud.com',
@@ -495,7 +505,11 @@ const appleDirectDomains = [
   'itunes.apple.com',
   'mzstatic.com',
   'apps.apple.com',
-  'appstore.com'
+  'appstore.com',
+  'aaplimg.com',
+  'cdn-apple.com',
+  'me.com',
+  'mac.com'
 ]
 
 config.route.rules = config.route.rules.filter(r => {
@@ -555,11 +569,6 @@ if (!homeDns || homeDns.detour !== 'wg-home') {
   throw new Error('home-dns 必须存在并 detour 到 wg-home')
 }
 
-const fakeipDns = config.dns?.servers?.find(s => s?.tag === 'fakeip')
-if (!fakeipDns) {
-  throw new Error('缺少 fakeip DNS server')
-}
-
 const wgRoute = config.route.rules.find(r =>
   Array.isArray(r?.ip_cidr) &&
   r.ip_cidr.includes('192.168.1.0/24') &&
@@ -570,16 +579,11 @@ if (!wgRoute) {
   throw new Error('缺少 WG 回家路由：192.168.1.0/24 -> wg-home')
 }
 
-const fakeipRoute = config.route.rules.find(r =>
-  Array.isArray(r?.ip_cidr) &&
-  r.ip_cidr.includes('198.18.0.0/15') &&
-  r.outbound === 'Proxy'
-)
-
-if (!fakeipRoute) {
-  throw new Error('缺少 FakeIP 路由：198.18.0.0/15 -> Proxy')
+const localDns = config.dns?.servers?.find(s => s?.tag === 'local-dns')
+if (!localDns) {
+  throw new Error('缺少 local-dns，route.default_domain_resolver 会失效')
 }
 
 $content = JSON.stringify(config, null, 2)
 
-console.log('✅ 完成 WireGuard + Partial FakeIP 配置（alpha.33 小幅吸收版）')
+console.log('✅ 完成 WireGuard 回家配置生成（No FakeIP 稳定版）')
