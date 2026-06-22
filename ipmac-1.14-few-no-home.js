@@ -36,12 +36,10 @@ if (!Array.isArray(config.dns.rules)) config.dns.rules = []
 if (!Array.isArray(config.outbounds)) config.outbounds = []
 if (!Array.isArray(config.http_clients)) config.http_clients = []
 
-// cache_file：无 FakeIP，只保留 DNS 缓存
 config.experimental.cache_file.enabled = true
 config.experimental.cache_file.store_dns = true
 delete config.experimental.cache_file.store_fakeip
 
-// DNS 全局增强
 config.dns.timeout = '3s'
 config.dns.strategy = 'prefer_ipv4'
 config.dns.cache_capacity = 65536
@@ -52,7 +50,6 @@ config.dns.optimistic = {
 }
 config.dns.final = 'proxy-dns'
 
-// http client v2
 config.http_clients = config.http_clients.filter(c => c?.tag !== 'direct')
 config.http_clients.unshift({
   tag: 'direct',
@@ -62,7 +59,6 @@ config.http_clients.unshift({
 config.route.default_http_client = 'direct'
 config.route.default_domain_resolver = 'local-dns'
 
-// DNS servers：完全移除 fakeip
 config.dns.servers = config.dns.servers.filter(s =>
   ![
     'google',
@@ -111,7 +107,6 @@ config.dns.servers.unshift(
   }
 )
 
-// tun-in：TUN + DNS hijack，删除 platform.http_proxy，增加 endpoint_independent_nat
 if (Array.isArray(config.inbounds)) {
   config.inbounds = config.inbounds.map(i => {
     if (i?.type === 'tun' && i?.tag === 'tun-in') {
@@ -140,7 +135,6 @@ if (Array.isArray(config.inbounds)) {
   })
 }
 
-// DNS rules 清理：移除 fakeip / home-dns / 旧策略
 config.dns.rules = config.dns.rules
   .map(removeDnsRuleStrategy)
   .filter(r => {
@@ -155,7 +149,6 @@ config.dns.rules = config.dns.rules
     return r
   })
 
-// 删除旧 query_type reject，下面统一重建
 config.dns.rules = config.dns.rules.filter(r => {
   if (
     Array.isArray(r?.query_type) &&
@@ -169,7 +162,6 @@ config.dns.rules = config.dns.rules.filter(r => {
   return true
 })
 
-// Google / YouTube / GV：走 proxy-dns，不再 fakeip
 config.dns.rules.unshift({
   domain_suffix: [
     'google.com',
@@ -191,7 +183,6 @@ config.dns.rules.unshift({
   server: 'proxy-dns'
 })
 
-// Telegram：走 proxy-dns
 config.dns.rules.splice(1, 0, {
   domain_suffix: [
     'telegram.org',
@@ -203,7 +194,6 @@ config.dns.rules.splice(1, 0, {
   server: 'proxy-dns'
 })
 
-// GitHub：走 proxy-dns
 config.dns.rules.splice(2, 0, {
   domain_suffix: [
     'github.com',
@@ -217,7 +207,6 @@ config.dns.rules.splice(2, 0, {
   server: 'proxy-dns'
 })
 
-// OpenAI / ChatGPT：走 proxy-dns
 config.dns.rules.splice(3, 0, {
   domain_suffix: [
     'openai.com',
@@ -232,7 +221,6 @@ config.dns.rules.splice(3, 0, {
   server: 'proxy-dns'
 })
 
-// DNS 噪音 reject
 config.dns.rules.splice(4, 0, {
   query_type: [
     'SVCB',
@@ -242,7 +230,6 @@ config.dns.rules.splice(4, 0, {
   action: 'reject'
 })
 
-// no-home：删除 home / wg-home
 config.outbounds = config.outbounds.filter(o =>
   o?.tag !== 'home' &&
   o?.tag !== 'wg-home' &&
@@ -258,7 +245,6 @@ if (Array.isArray(config.route.rules)) {
 
 if (!Array.isArray(config.route.rules)) config.route.rules = []
 
-// 删除旧 FakeIP 路由：198.18.0.0/15
 config.route.rules = config.route.rules.filter(r => {
   if (
     Array.isArray(r?.ip_cidr) &&
@@ -269,7 +255,6 @@ config.route.rules = config.route.rules.filter(r => {
   return true
 })
 
-// Apple 服务直连
 const appleDirectDomains = [
   'apple.com',
   'icloud.com',
@@ -278,7 +263,11 @@ const appleDirectDomains = [
   'itunes.apple.com',
   'mzstatic.com',
   'apps.apple.com',
-  'appstore.com'
+  'appstore.com',
+  'aaplimg.com',
+  'cdn-apple.com',
+  'me.com',
+  'mac.com'
 ]
 
 config.route.rules = config.route.rules.filter(r => {
@@ -301,7 +290,6 @@ if (privateRuleIndex >= 0) {
   config.route.rules.push(appleDirectRule)
 }
 
-// rule-set 修正
 if (Array.isArray(config.route.rule_set)) {
   config.route.rule_set = config.route.rule_set.map(rs => {
     if (rs?.type === 'remote' && typeof rs.url === 'string') {
@@ -326,7 +314,6 @@ if (Array.isArray(config.route.rule_set)) {
   })
 }
 
-// 获取代理节点
 let proxies = url
   ? await produceArtifact({
       name,
@@ -358,7 +345,6 @@ if (proxyTags.length === 0) {
   throw new Error('没有获取到代理节点，无法生成 Proxy 组')
 }
 
-// 避免重复注入旧节点
 config.outbounds = config.outbounds.filter(o => {
   if (!o?.tag) return true
   if (o.tag === 'Proxy') return true
@@ -368,7 +354,6 @@ config.outbounds = config.outbounds.filter(o => {
 
 config.outbounds.push(...proxies)
 
-// 修复 Proxy 组
 let proxyGroup = config.outbounds.find(o =>
   o?.tag === 'Proxy' &&
   o?.type === 'selector'
@@ -391,7 +376,6 @@ proxyGroup.outbounds = dedupe([
 
 proxyGroup.default = proxyTags[0] || 'direct'
 
-// 确保 direct 存在
 if (!config.outbounds.some(o => o?.tag === 'direct')) {
   config.outbounds.push({
     type: 'direct',
@@ -399,10 +383,8 @@ if (!config.outbounds.some(o => o?.tag === 'direct')) {
   })
 }
 
-// 删除 auto 旧组
 config.outbounds = config.outbounds.filter(o => o?.tag !== 'auto')
 
-// 校验
 if (proxyGroup.outbounds.includes('home') || proxyGroup.outbounds.includes('wg-home')) {
   throw new Error('no-home 配置中 Proxy 组不应包含 home / wg-home')
 }
