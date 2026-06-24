@@ -1,6 +1,7 @@
-// iPhone / Mac sing-box 1.14-alpha.21：自建少节点 no-home（增强稳定版）
+// iPhone / Mac sing-box 1.14-alpha：自建少节点 no-home
+// 无 FakeIP 稳定版：DoT + DNS Hijack + Sniff + Apple Direct + endpoint_independent_nat
 
-console.log('🚀 开始生成 no-home 配置')
+console.log('🚀 开始生成 no-home 配置（No FakeIP 稳定版）')
 
 let { type, name, includeUnsupportedProxy, url } = $arguments
 type = /^1$|col|组合/i.test(type) ? 'collection' : 'subscription'
@@ -10,111 +11,241 @@ let config = parser.parse($content ?? $files[0])
 
 function removeDnsRuleStrategy(rule) {
   if (!rule || typeof rule !== 'object') return rule
-
   delete rule.strategy
-
   if (Array.isArray(rule.rules)) {
     rule.rules = rule.rules.map(removeDnsRuleStrategy)
   }
-
   return rule
+}
+
+function dedupe(arr) {
+  return [...new Set((arr || []).filter(Boolean))]
 }
 
 if (config.experimental?.clash_api?.external_ui_http_client) {
   delete config.experimental.clash_api.external_ui_http_client
 }
 
+if (!config.experimental) config.experimental = {}
+if (!config.experimental.cache_file) config.experimental.cache_file = {}
 if (!config.dns) config.dns = {}
 if (!config.route) config.route = {}
+
+if (!Array.isArray(config.dns.servers)) config.dns.servers = []
+if (!Array.isArray(config.dns.rules)) config.dns.rules = []
 if (!Array.isArray(config.outbounds)) config.outbounds = []
 if (!Array.isArray(config.http_clients)) config.http_clients = []
 
-// alpha.21 基础增强
-config.dns.timeout = '3s'
-config.dns.strategy = 'ipv4_only'
+// cache_file：无 FakeIP，只保留 DNS 缓存
+config.experimental.cache_file.enabled = true
+config.experimental.cache_file.store_dns = true
+delete config.experimental.cache_file.store_fakeip
 
+// DNS 全局增强
+config.dns.timeout = '3s'
+config.dns.strategy = 'prefer_ipv4'
+config.dns.cache_capacity = 65536
+config.dns.reverse_mapping = true
+config.dns.optimistic = {
+  enabled: true,
+  timeout: '1h0m0s'
+}
+config.dns.final = 'proxy-dns'
+
+// http client v2
 config.http_clients = config.http_clients.filter(c => c?.tag !== 'direct')
-config.http_clients.unshift({ tag: 'direct' })
+config.http_clients.unshift({
+  tag: 'direct',
+  version: 2
+})
 
 config.route.default_http_client = 'direct'
 config.route.default_domain_resolver = 'local-dns'
 
-// tun-in 使用 alpha.21 dns_mode / dns_address
+// DNS servers：完全移除 fakeip
+config.dns.servers = config.dns.servers.filter(s =>
+  ![
+    'google',
+    'public',
+    'hosts-fix',
+    'local',
+    'mdns-server',
+    'local-dns',
+    'proxy-dns',
+    'fakeip',
+    'home-dns'
+  ].includes(s?.tag)
+)
+
+config.dns.servers.unshift(
+  {
+    type: 'hosts',
+    tag: 'hosts-fix',
+    predefined: {
+      'dns.google': ['8.8.8.8', '8.8.4.4'],
+      'dns.alidns.com': ['223.5.5.5', '223.6.6.6'],
+      'cloudflare-dns.com': ['104.16.248.249', '104.16.249.249']
+    }
+  },
+  {
+    type: 'local',
+    tag: 'local',
+    neighbor_domain: ['.local', '.lan']
+  },
+  {
+    type: 'mdns',
+    tag: 'mdns-server'
+  },
+  {
+    tag: 'local-dns',
+    type: 'udp',
+    server: '223.5.5.5'
+  },
+  {
+    tag: 'proxy-dns',
+    type: 'tls',
+    server: 'dns.google',
+    server_port: 853,
+    domain_resolver: 'hosts-fix',
+    detour: 'Proxy'
+  }
+)
+
+// tun-in：TUN + DNS hijack，删除 platform.http_proxy，增加 endpoint_independent_nat
 if (Array.isArray(config.inbounds)) {
   config.inbounds = config.inbounds.map(i => {
     if (i?.type === 'tun' && i?.tag === 'tun-in') {
-      return {
+      const tun = {
         ...i,
+        stack: 'system',
+        auto_route: true,
+        strict_route: true,
         dns_mode: 'hijack',
-        dns_address: '172.19.0.2'
+        dns_address: '172.19.0.2',
+        endpoint_independent_nat: true
       }
+
+      if (tun.platform?.http_proxy) {
+        delete tun.platform.http_proxy
+      }
+
+      if (tun.platform && Object.keys(tun.platform).length === 0) {
+        delete tun.platform
+      }
+
+      return tun
     }
+
     return i
   })
 }
 
-// DNS servers 修正
-if (Array.isArray(config.dns.servers)) {
-  config.dns.servers = config.dns.servers.map(s => {
-    if (s?.tag === 'local') {
-      return { ...s, tag: 'local-dns' }
-    }
-
-    if (s?.tag === 'google' || s?.tag === 'proxy-dns') {
-      return { ...s, detour: 'Proxy' }
-    }
-
-    if (s?.tag === 'public' && s?.domain_resolver === 'local') {
-      return { ...s, domain_resolver: 'local-dns' }
-    }
-
-    return s
+// DNS rules 清理：移除 fakeip / home-dns / 旧策略
+config.dns.rules = config.dns.rules
+  .map(removeDnsRuleStrategy)
+  .filter(r => {
+    if (r?.ip_cidr && !r?.match_response) return false
+    if (r?.server === 'fakeip') return false
+    if (r?.server === 'home-dns') return false
+    return true
   })
-}
+  .map(r => {
+    if (r?.server === 'local') return { ...r, server: 'local-dns' }
+    if (r?.server === 'google') return { ...r, server: 'proxy-dns' }
+    return r
+  })
 
-// DNS rules 修正
-if (!Array.isArray(config.dns.rules)) config.dns.rules = []
-
-// 递归删除 DNS rules 里废弃的 strategy
-config.dns.rules = config.dns.rules.map(removeDnsRuleStrategy)
-
-// 新版 1.14：dns.rules 里的 ip_cidr 是响应匹配字段，没有 match_response=true 会报错
+// 删除旧 query_type reject，下面统一重建
 config.dns.rules = config.dns.rules.filter(r => {
-  if (r?.ip_cidr && !r?.match_response) return false
+  if (
+    Array.isArray(r?.query_type) &&
+    r.query_type.includes('SVCB') &&
+    r.query_type.includes('HTTPS') &&
+    r.query_type.includes('PTR') &&
+    r.action === 'reject'
+  ) {
+    return false
+  }
   return true
 })
 
-// server: local 统一改 local-dns
-config.dns.rules = config.dns.rules.map(r => {
-  if (r?.server === 'local') {
-    return { ...r, server: 'local-dns' }
-  }
-  return r
+// Google / YouTube / GV：走 proxy-dns，不再 fakeip
+config.dns.rules.unshift({
+  domain_suffix: [
+    'google.com',
+    'google.com.hk',
+    'googleapis.com',
+    'gstatic.com',
+    'ggpht.com',
+    'googleusercontent.com',
+    'youtube.com',
+    'ytimg.com',
+    'googlevideo.com',
+    'voice.google.com',
+    'googlevoice.com',
+    'clients4.google.com',
+    'clients6.google.com',
+    'hangouts.google.com'
+  ],
+  action: 'route',
+  server: 'proxy-dns'
 })
 
-// 减少 iOS/macOS HTTPS/SVCB/PTR 查询噪音
-const hasRejectQtypeRule = config.dns.rules.some(r =>
-  Array.isArray(r?.query_type) &&
-  r.query_type.includes('SVCB') &&
-  r.query_type.includes('HTTPS') &&
-  r.query_type.includes('PTR') &&
-  r.action === 'reject'
-)
+// Telegram：走 proxy-dns
+config.dns.rules.splice(1, 0, {
+  domain_suffix: [
+    'telegram.org',
+    't.me',
+    'tdesktop.com',
+    'telegra.ph'
+  ],
+  action: 'route',
+  server: 'proxy-dns'
+})
 
-if (!hasRejectQtypeRule) {
-  config.dns.rules.unshift({
-    query_type: [
-      'SVCB',
-      'HTTPS',
-      'PTR'
-    ],
-    action: 'reject'
-  })
-}
+// GitHub：走 proxy-dns
+config.dns.rules.splice(2, 0, {
+  domain_suffix: [
+    'github.com',
+    'githubusercontent.com',
+    'githubassets.com',
+    'github.io',
+    'raw.githubusercontent.com',
+    'objects.githubusercontent.com'
+  ],
+  action: 'route',
+  server: 'proxy-dns'
+})
 
-// no-home：删除 home / __HOME_PLACEHOLDER__
+// OpenAI / ChatGPT：走 proxy-dns
+config.dns.rules.splice(3, 0, {
+  domain_suffix: [
+    'openai.com',
+    'chatgpt.com',
+    'oaistatic.com',
+    'oaiusercontent.com',
+    'auth0.openai.com',
+    'cdn.openai.com',
+    'api.openai.com'
+  ],
+  action: 'route',
+  server: 'proxy-dns'
+})
+
+// DNS 噪音 reject
+config.dns.rules.splice(4, 0, {
+  query_type: [
+    'SVCB',
+    'HTTPS',
+    'PTR'
+  ],
+  action: 'reject'
+})
+
+// no-home：删除 home / wg-home
 config.outbounds = config.outbounds.filter(o =>
   o?.tag !== 'home' &&
+  o?.tag !== 'wg-home' &&
   o?.tag !== '__HOME_PLACEHOLDER__'
 )
 
@@ -123,6 +254,51 @@ if (Array.isArray(config.route.rules)) {
     r?.outbound !== 'home' &&
     r?.outbound !== 'wg-home'
   )
+}
+
+if (!Array.isArray(config.route.rules)) config.route.rules = []
+
+// 删除旧 FakeIP 路由：198.18.0.0/15
+config.route.rules = config.route.rules.filter(r => {
+  if (
+    Array.isArray(r?.ip_cidr) &&
+    r.ip_cidr.includes('198.18.0.0/15')
+  ) {
+    return false
+  }
+  return true
+})
+
+// Apple 服务直连
+const appleDirectDomains = [
+  'apple.com',
+  'icloud.com',
+  'apple-dns.net',
+  'push.apple.com',
+  'itunes.apple.com',
+  'mzstatic.com',
+  'apps.apple.com',
+  'appstore.com'
+]
+
+config.route.rules = config.route.rules.filter(r => {
+  const ds = Array.isArray(r?.domain_suffix)
+    ? r.domain_suffix
+    : (typeof r?.domain_suffix === 'string' ? [r.domain_suffix] : [])
+
+  return !(r?.outbound === 'direct' && ds.some(d => appleDirectDomains.includes(d)))
+})
+
+const privateRuleIndex = config.route.rules.findIndex(r => r?.ip_is_private === true)
+const appleDirectRule = {
+  domain_suffix: appleDirectDomains,
+  outbound: 'direct'
+}
+
+if (privateRuleIndex >= 0) {
+  config.route.rules.splice(privateRuleIndex, 0, appleDirectRule)
+} else {
+  config.route.rules.push(appleDirectRule)
 }
 
 // rule-set 修正
@@ -193,19 +369,25 @@ config.outbounds = config.outbounds.filter(o => {
 config.outbounds.push(...proxies)
 
 // 修复 Proxy 组
-const proxyGroup = config.outbounds.find(o =>
+let proxyGroup = config.outbounds.find(o =>
   o?.tag === 'Proxy' &&
-  Array.isArray(o?.outbounds)
+  o?.type === 'selector'
 )
 
 if (!proxyGroup) {
-  throw new Error('模板中未找到 tag=Proxy 的 selector')
+  proxyGroup = {
+    tag: 'Proxy',
+    type: 'selector',
+    outbounds: [],
+    default: proxyTags[0]
+  }
+  config.outbounds.unshift(proxyGroup)
 }
 
-proxyGroup.outbounds = [
+proxyGroup.outbounds = dedupe([
   ...proxyTags,
   'direct'
-]
+])
 
 proxyGroup.default = proxyTags[0] || 'direct'
 
@@ -225,13 +407,9 @@ if (proxyGroup.outbounds.includes('home') || proxyGroup.outbounds.includes('wg-h
   throw new Error('no-home 配置中 Proxy 组不应包含 home / wg-home')
 }
 
-const proxyDns = config.dns?.servers?.find(s =>
-  s?.tag === 'google' ||
-  s?.tag === 'proxy-dns'
-)
-
+const proxyDns = config.dns?.servers?.find(s => s?.tag === 'proxy-dns')
 if (proxyDns && proxyDns.detour !== 'Proxy') {
-  throw new Error(`DNS 服务器 ${proxyDns.tag} 必须 detour 到 Proxy`)
+  throw new Error('proxy-dns 必须 detour 到 Proxy')
 }
 
 const localDns = config.dns?.servers?.find(s => s?.tag === 'local-dns')
@@ -241,4 +419,4 @@ if (!localDns) {
 
 $content = JSON.stringify(config, null, 2)
 
-console.log('✅ 完成 no-home 配置生成（alpha.21 增强稳定版）')
+console.log('✅ 完成 no-home 配置生成（No FakeIP 稳定版）')
