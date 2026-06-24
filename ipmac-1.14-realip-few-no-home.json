@@ -12,16 +12,41 @@
       "default_mode": "rule"
     },
     "cache_file": {
-      "enabled": true
+      "enabled": true,
+      "store_dns": true
     }
   },
   "dns": {
     "servers": [
       {
-        "tag": "google",
-        "type": "tls",
-        "server": "8.8.8.8",
-        "detour": "Proxy"
+        "type": "hosts",
+        "tag": "hosts-fix",
+        "predefined": {
+          "dns.google": [
+            "8.8.8.8",
+            "8.8.4.4"
+          ],
+          "dns.alidns.com": [
+            "223.5.5.5",
+            "223.6.6.6"
+          ],
+          "cloudflare-dns.com": [
+            "104.16.248.249",
+            "104.16.249.249"
+          ]
+        }
+      },
+      {
+        "type": "local",
+        "tag": "local",
+        "neighbor_domain": [
+          ".local",
+          ".lan"
+        ]
+      },
+      {
+        "type": "mdns",
+        "tag": "mdns-server"
       },
       {
         "tag": "local-dns",
@@ -29,13 +54,70 @@
         "server": "223.5.5.5"
       },
       {
-        "tag": "public",
-        "type": "https",
-        "server": "dns.alidns.com",
-        "domain_resolver": "local-dns"
+        "tag": "proxy-dns",
+        "type": "tls",
+        "server": "dns.google",
+        "server_port": 853,
+        "domain_resolver": "hosts-fix",
+        "detour": "Proxy"
       }
     ],
     "rules": [
+      {
+        "domain_suffix": [
+          "google.com",
+          "google.com.hk",
+          "googleapis.com",
+          "gstatic.com",
+          "ggpht.com",
+          "googleusercontent.com",
+          "youtube.com",
+          "ytimg.com",
+          "googlevideo.com",
+          "voice.google.com",
+          "googlevoice.com",
+          "clients4.google.com",
+          "clients6.google.com",
+          "hangouts.google.com"
+        ],
+        "action": "route",
+        "server": "proxy-dns"
+      },
+      {
+        "domain_suffix": [
+          "telegram.org",
+          "t.me",
+          "tdesktop.com",
+          "telegra.ph"
+        ],
+        "action": "route",
+        "server": "proxy-dns"
+      },
+      {
+        "domain_suffix": [
+          "github.com",
+          "githubusercontent.com",
+          "githubassets.com",
+          "github.io",
+          "raw.githubusercontent.com",
+          "objects.githubusercontent.com"
+        ],
+        "action": "route",
+        "server": "proxy-dns"
+      },
+      {
+        "domain_suffix": [
+          "openai.com",
+          "chatgpt.com",
+          "oaistatic.com",
+          "oaiusercontent.com",
+          "auth0.openai.com",
+          "cdn.openai.com",
+          "api.openai.com"
+        ],
+        "action": "route",
+        "server": "proxy-dns"
+      },
       {
         "query_type": [
           "SVCB",
@@ -52,7 +134,7 @@
       {
         "clash_mode": "global",
         "action": "route",
-        "server": "google"
+        "server": "proxy-dns"
       },
       {
         "domain_suffix": [
@@ -75,13 +157,18 @@
       {
         "rule_set": "geosite-geolocation-!cn",
         "action": "route",
-        "server": "google"
+        "server": "proxy-dns"
       }
     ],
-    "reverse_mapping": false,
-    "strategy": "ipv4_only",
-    "final": "google",
-    "timeout": "3s"
+    "reverse_mapping": true,
+    "strategy": "prefer_ipv4",
+    "final": "proxy-dns",
+    "timeout": "3s",
+    "cache_capacity": 65536,
+    "optimistic": {
+      "enabled": true,
+      "timeout": "1h0m0s"
+    }
   },
   "inbounds": [
     {
@@ -94,15 +181,9 @@
       "stack": "system",
       "auto_route": true,
       "strict_route": true,
-      "platform": {
-        "http_proxy": {
-          "enabled": true,
-          "server": "127.0.0.1",
-          "server_port": 7890
-        }
-      },
       "dns_mode": "hijack",
-      "dns_address": "172.19.0.2"
+      "dns_address": "172.19.0.2",
+      "endpoint_independent_nat": true
     },
     {
       "tag": "mixed-in",
@@ -127,6 +208,7 @@
   ],
   "route": {
     "default_domain_resolver": "local-dns",
+    "default_http_client": "direct",
     "auto_detect_interface": true,
     "final": "Proxy",
     "rules": [
@@ -191,6 +273,22 @@
         "outbound": "direct"
       },
       {
+        "domain_suffix": [
+          "apple.com",
+          "icloud.com",
+          "apple-dns.net",
+          "push.apple.com",
+          "itunes.apple.com",
+          "mzstatic.com",
+          "apps.apple.com",
+          "cdn-apple.com",
+          "me.com",
+          "mac.com",
+          "appstore.com"
+        ],
+        "outbound": "direct"
+      },
+      {
         "ip_is_private": true,
         "outbound": "direct"
       },
@@ -231,12 +329,12 @@
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs"
       }
-    ],
-    "default_http_client": "direct"
+    ]
   },
   "http_clients": [
     {
-      "tag": "direct"
+      "tag": "direct",
+      "version": 2
     }
   ]
 }
