@@ -7,6 +7,8 @@
       "external_controller": "127.0.0.1:9090",
       "external_ui": "ui",
       "secret": "",
+      "external_ui_download_url": "https://gh-proxy.com/https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip",
+      "external_ui_download_detour": "direct",
       "default_mode": "rule"
     },
     "cache_file": {
@@ -68,20 +70,30 @@
     ],
     "rules": [
       {
-        "domain_suffix": [
-          "ktpd.fun",
-          "xwcac68u.top"
-        ],
-        "action": "route",
-        "server": "home-dns"
-      },
-      {
         "query_type": [
           "SVCB",
           "HTTPS",
           "PTR"
         ],
         "action": "reject"
+      },
+      {
+        "clash_mode": "direct",
+        "action": "route",
+        "server": "local-dns"
+      },
+      {
+        "clash_mode": "global",
+        "action": "route",
+        "server": "proxy-dns"
+      },
+      {
+        "domain_suffix": [
+          "ktpd.fun",
+          "xwcac68u.top"
+        ],
+        "action": "route",
+        "server": "home-dns"
       },
       {
         "domain_suffix": [
@@ -139,14 +151,17 @@
         "server": "proxy-dns"
       },
       {
-        "clash_mode": "direct",
+        "domain_suffix": [
+          "ghfast.top",
+          "raw.githubusercontent.com",
+          "github.com",
+          "gh-proxy.com",
+          "ghproxy.net",
+          "testingcf.jsdelivr.net",
+          "cdn.jsdelivr.net"
+        ],
         "action": "route",
         "server": "local-dns"
-      },
-      {
-        "clash_mode": "global",
-        "action": "route",
-        "server": "proxy-dns"
       },
       {
         "rule_set": "geosite-cn",
@@ -159,11 +174,11 @@
         "server": "proxy-dns"
       }
     ],
-    "final": "proxy-dns",
+    "reverse_mapping": true,
     "strategy": "prefer_ipv4",
+    "final": "local-dns",
     "timeout": "3s",
     "cache_capacity": 65536,
-    "reverse_mapping": true,
     "optimistic": {
       "enabled": true,
       "timeout": "1h0m0s"
@@ -194,29 +209,31 @@
   ],
   "inbounds": [
     {
-      "type": "tun",
       "tag": "tun-in",
+      "type": "tun",
       "address": [
-        "172.19.0.1/30"
+        "172.19.0.1/30",
+        "fdfe:dcba:9876::1/126"
       ],
+      "mtu": 1500,
+      "stack": "system",
       "auto_route": true,
       "strict_route": true,
-      "stack": "system",
       "dns_mode": "hijack",
       "dns_address": "172.19.0.2",
       "endpoint_independent_nat": true
     },
     {
-      "type": "mixed",
       "tag": "mixed-in",
+      "type": "mixed",
       "listen": "127.0.0.1",
       "listen_port": 7890
     }
   ],
   "outbounds": [
     {
-      "type": "selector",
       "tag": "Proxy",
+      "type": "selector",
       "outbounds": [
         "direct"
       ],
@@ -245,16 +262,35 @@
         "action": "sniff"
       },
       {
-        "protocol": "dns",
+        "type": "logical",
+        "mode": "or",
+        "rules": [
+          {
+            "port": 53
+          },
+          {
+            "protocol": "dns"
+          }
+        ],
         "action": "hijack-dns"
       },
       {
-        "port": 53,
-        "action": "hijack-dns"
+        "port": [
+          853,
+          5353
+        ],
+        "action": "reject"
       },
       {
         "ip_cidr": [
           "192.168.1.0/24"
+        ],
+        "outbound": "wg-home"
+      },
+      {
+        "domain_suffix": [
+          "ktpd.fun",
+          "xwcac68u.top"
         ],
         "outbound": "wg-home"
       },
@@ -267,13 +303,33 @@
           "qlogo.cn",
           "tenpay.com",
           "wechat.com",
+          "mmbiz.qpic.cn",
+          "mmbiz.qlogo.cn",
           "weixinbridge.com"
         ],
         "outbound": "direct"
       },
       {
         "rule_set": "geosite-category-ads-all",
+        "clash_mode": "rule",
         "action": "reject"
+      },
+      {
+        "clash_mode": "direct",
+        "outbound": "direct"
+      },
+      {
+        "clash_mode": "global",
+        "outbound": "Proxy"
+      },
+      {
+        "domain": [
+          "clash.razord.top",
+          "yacd.metacubex.one",
+          "yacd.haishan.me",
+          "d.metacubex.one"
+        ],
+        "outbound": "direct"
       },
       {
         "domain_suffix": [
@@ -306,6 +362,51 @@
           "geosite-cn"
         ],
         "outbound": "direct"
+      },
+      {
+        "protocol": [
+          "stun",
+          "dtls"
+        ],
+        "action": "reject"
+      },
+      {
+        "type": "logical",
+        "mode": "or",
+        "rules": [
+          {
+            "network": "udp",
+            "port": [
+              3478,
+              5349,
+              5350,
+              19302,
+              10000
+            ]
+          },
+          {
+            "domain_regex": "^stun\\..+"
+          },
+          {
+            "domain_keyword": [
+              "stun",
+              "turn",
+              "httpdns"
+            ]
+          }
+        ],
+        "action": "reject"
+      },
+      {
+        "action": "route-options",
+        "udp_disable_domain_unmapping": true,
+        "udp_connect": true
+      },
+      {
+        "action": "resolve"
+      },
+      {
+        "outbound": "Proxy"
       }
     ],
     "rule_set": [
@@ -339,6 +440,11 @@
     {
       "tag": "direct",
       "version": 2
+    },
+    {
+      "tag": "proxy",
+      "version": 2,
+      "detour": "Proxy"
     }
   ]
 }
