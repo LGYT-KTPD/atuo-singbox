@@ -64,6 +64,24 @@
     ],
     "rules": [
       {
+        "query_type": [
+          "SVCB",
+          "HTTPS",
+          "PTR"
+        ],
+        "action": "reject"
+      },
+      {
+        "clash_mode": "direct",
+        "action": "route",
+        "server": "local-dns"
+      },
+      {
+        "clash_mode": "global",
+        "action": "route",
+        "server": "proxy-dns"
+      },
+      {
         "domain_suffix": [
           "google.com",
           "google.com.hk",
@@ -119,24 +137,6 @@
         "server": "proxy-dns"
       },
       {
-        "query_type": [
-          "SVCB",
-          "HTTPS",
-          "PTR"
-        ],
-        "action": "reject"
-      },
-      {
-        "clash_mode": "direct",
-        "action": "route",
-        "server": "local-dns"
-      },
-      {
-        "clash_mode": "global",
-        "action": "route",
-        "server": "proxy-dns"
-      },
-      {
         "domain_suffix": [
           "ghfast.top",
           "raw.githubusercontent.com",
@@ -162,7 +162,7 @@
     ],
     "reverse_mapping": true,
     "strategy": "prefer_ipv4",
-    "final": "proxy-dns",
+    "final": "local-dns",
     "timeout": "3s",
     "cache_capacity": 65536,
     "optimistic": {
@@ -178,6 +178,7 @@
         "172.19.0.1/30",
         "fdfe:dcba:9876::1/126"
       ],
+      "mtu": 1500,
       "stack": "system",
       "auto_route": true,
       "strict_route": true,
@@ -237,6 +238,13 @@
         "action": "hijack-dns"
       },
       {
+        "port": [
+          853,
+          5353
+        ],
+        "action": "reject"
+      },
+      {
         "domain_suffix": [
           "weixin.qq.com",
           "wx.qq.com",
@@ -246,7 +254,8 @@
           "tenpay.com",
           "wechat.com",
           "mmbiz.qpic.cn",
-          "mmbiz.qlogo.cn"
+          "mmbiz.qlogo.cn",
+          "weixinbridge.com"
         ],
         "outbound": "direct"
       },
@@ -281,10 +290,11 @@
           "itunes.apple.com",
           "mzstatic.com",
           "apps.apple.com",
+          "appstore.com",
+          "aaplimg.com",
           "cdn-apple.com",
           "me.com",
-          "mac.com",
-          "appstore.com"
+          "mac.com"
         ],
         "outbound": "direct"
       },
@@ -302,6 +312,51 @@
           "geosite-cn"
         ],
         "outbound": "direct"
+      },
+      {
+        "protocol": [
+          "stun",
+          "dtls"
+        ],
+        "action": "reject"
+      },
+      {
+        "type": "logical",
+        "mode": "or",
+        "rules": [
+          {
+            "network": "udp",
+            "port": [
+              3478,
+              5349,
+              5350,
+              19302,
+              10000
+            ]
+          },
+          {
+            "domain_regex": "^stun\\..+"
+          },
+          {
+            "domain_keyword": [
+              "stun",
+              "turn",
+              "httpdns"
+            ]
+          }
+        ],
+        "action": "reject"
+      },
+      {
+        "action": "route-options",
+        "udp_disable_domain_unmapping": true,
+        "udp_connect": true
+      },
+      {
+        "action": "resolve"
+      },
+      {
+        "outbound": "Proxy"
       }
     ],
     "rule_set": [
@@ -335,6 +390,11 @@
     {
       "tag": "direct",
       "version": 2
+    },
+    {
+      "tag": "proxy",
+      "version": 2,
+      "detour": "Proxy"
     }
   ]
 }
