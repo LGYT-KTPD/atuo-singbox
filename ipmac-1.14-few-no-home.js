@@ -12,6 +12,15 @@ type = /^1$|col|组合/i.test(type) ? 'collection' : 'subscription'
 const parser = ProxyUtils.JSON5 || JSON
 let config = parser.parse($content ?? $files[0])
 
+function env(name, fallback = undefined) {
+  const v = process?.env?.[name]
+  if (v === undefined || v === null || String(v).trim() === '') {
+    return fallback
+  }
+  return String(v).trim()
+}
+
+
 function removeDnsRuleStrategy(rule) {
   if (!rule || typeof rule !== 'object') return rule
   delete rule.strategy
@@ -115,6 +124,21 @@ function enhanceProxyOutbound(outbound) {
   }
 
   return next
+}
+
+
+function ensureServerDirectRule() {
+  const server = env('REALITY_SERVER', env('SERVER_IP', ''))
+  if (!server) return
+
+  const cidr = `${server}/32`
+  config.route.rules = config.route.rules.filter(r =>
+    !(r?.ip_cidr === cidr && r?.outbound === 'direct')
+  )
+  config.route.rules.unshift({
+    ip_cidr: cidr,
+    outbound: 'direct'
+  })
 }
 
 if (config.experimental?.clash_api?.external_ui_http_client) {
@@ -724,6 +748,8 @@ const fakeipDns = config.dns?.servers?.find(s => s?.tag === 'fakeip')
 if (fakeipDns) {
   throw new Error('no-home RealIP 配置不应包含 fakeip DNS server')
 }
+
+ensureServerDirectRule()
 
 $content = JSON.stringify(config, null, 2)
 
