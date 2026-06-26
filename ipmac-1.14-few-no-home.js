@@ -12,15 +12,6 @@ type = /^1$|col|组合/i.test(type) ? 'collection' : 'subscription'
 const parser = ProxyUtils.JSON5 || JSON
 let config = parser.parse($content ?? $files[0])
 
-function env(name, fallback = undefined) {
-  const v = process?.env?.[name]
-  if (v === undefined || v === null || String(v).trim() === '') {
-    return fallback
-  }
-  return String(v).trim()
-}
-
-
 function removeDnsRuleStrategy(rule) {
   if (!rule || typeof rule !== 'object') return rule
   delete rule.strategy
@@ -127,18 +118,39 @@ function enhanceProxyOutbound(outbound) {
 }
 
 
-function ensureServerDirectRule() {
-  const server = env('REALITY_SERVER', env('SERVER_IP', ''))
-  if (!server) return
+function isIPv4(value) {
+  return typeof value === 'string' &&
+    /^(25[0-5]|2[0-4]\\d|1?\\d?\\d)(\\.(25[0-5]|2[0-4]\\d|1?\\d?\\d)){3}$/.test(value)
+}
 
-  const cidr = `${server}/32`
-  config.route.rules = config.route.rules.filter(r =>
-    !(r?.ip_cidr === cidr && r?.outbound === 'direct')
-  )
-  config.route.rules.unshift({
+function ensureProxyServerDirectRules(proxies) {
+  const servers = dedupe((proxies || [])
+    .map(p => p?.server)
+    .filter(isIPv4))
+
+  if (!servers.length) return
+
+  const cidrs = servers.map(server => `${server}/32`)
+
+  config.route.rules = config.route.rules.filter(rule => {
+    if (rule?.outbound !== 'direct') return true
+
+    const ipCidr = rule?.ip_cidr
+    if (typeof ipCidr === 'string') {
+      return !cidrs.includes(ipCidr)
+    }
+
+    if (Array.isArray(ipCidr)) {
+      return !ipCidr.some(item => cidrs.includes(item))
+    }
+
+    return true
+  })
+
+  config.route.rules.unshift(...cidrs.map(cidr => ({
     ip_cidr: cidr,
     outbound: 'direct'
-  })
+  })))
 }
 
 if (config.experimental?.clash_api?.external_ui_http_client) {
@@ -749,7 +761,7 @@ if (fakeipDns) {
   throw new Error('no-home RealIP 配置不应包含 fakeip DNS server')
 }
 
-ensureServerDirectRule()
+ensureProxyServerDirectRules(proxies)
 
 $content = JSON.stringify(config, null, 2)
 
