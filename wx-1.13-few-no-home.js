@@ -1,4 +1,4 @@
-// Windows sing-box 1.13.11 专用：自建节点少节点 no-home
+// Windows sing-box 1.13.14 专用：自建节点少节点 no-home
 // 1.13.11 不使用 http_clients / route.default_http_client
 // 规则下载使用 download_detour: direct
 
@@ -14,6 +14,45 @@ try {
   config = parser.parse($content ?? $files[0])
 } catch (e) {
   throw new Error(`配置解析失败: ${e.message}`)
+}
+
+
+function isIPv4(value) {
+  return typeof value === 'string' &&
+    /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/.test(value)
+}
+
+function ensureSelfBuiltServerDirectRule(proxies) {
+  if (!config.route) config.route = {}
+  if (!Array.isArray(config.route.rules)) config.route.rules = []
+
+  const serverDirectRules = []
+
+  for (const proxy of proxies || []) {
+    const server = proxy?.server
+    if (!isIPv4(server)) continue
+
+    serverDirectRules.push({
+      ip_cidr: `${server}/32`,
+      outbound: 'direct'
+    })
+  }
+
+  if (!serverDirectRules.length) return
+
+  const managedCidrs = serverDirectRules.map(rule => rule.ip_cidr)
+
+  config.route.rules = config.route.rules.filter(rule => {
+    if (rule?.outbound !== 'direct') return true
+
+    const ipCidr = rule?.ip_cidr
+    if (typeof ipCidr === 'string') return !managedCidrs.includes(ipCidr)
+    if (Array.isArray(ipCidr)) return !ipCidr.some(item => managedCidrs.includes(item))
+
+    return true
+  })
+
+  config.route.rules.unshift(...serverDirectRules)
 }
 
 if (config.experimental?.clash_api?.external_ui_http_client) {
@@ -231,10 +270,12 @@ if (!localDns) {
   throw new Error('缺少 local DNS，route.default_domain_resolver 会失效')
 }
 
+ensureSelfBuiltServerDirectRule(proxies)
+
 $content = JSON.stringify(config, null, 2)
 
 function log(v) {
-  console.log(`[📦 Windows 1.13.11 自建节点 no-home 脚本] ${v}`)
+  console.log(`[📦 Windows 1.13.14 自建节点 no-home 脚本] ${v}`)
 }
 
 log('✅ 完成')
