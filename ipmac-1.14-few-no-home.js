@@ -120,37 +120,53 @@ function enhanceProxyOutbound(outbound) {
 
 function isIPv4(value) {
   return typeof value === 'string' &&
-    /^(25[0-5]|2[0-4]\\d|1?\\d?\\d)(\\.(25[0-5]|2[0-4]\\d|1?\\d?\\d)){3}$/.test(value)
+    /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/.test(value)
 }
 
 function ensureProxyServerDirectRules(proxies) {
-  const servers = dedupe((proxies || [])
-    .map(p => p?.server)
-    .filter(isIPv4))
+  if (!config.route) config.route = {}
+  if (!Array.isArray(config.route.rules)) config.route.rules = []
 
-  if (!servers.length) return
+  const serverDirectRules = []
 
-  const cidrs = servers.map(server => `${server}/32`)
+  for (const proxy of proxies || []) {
+    const server = proxy?.server
+
+    if (!isIPv4(server)) {
+      continue
+    }
+
+    serverDirectRules.push({
+      ip_cidr: `${server}/32`,
+      outbound: 'direct'
+    })
+  }
+
+  if (!serverDirectRules.length) {
+    return
+  }
+
+  const managedCidrs = serverDirectRules.map(rule => rule.ip_cidr)
 
   config.route.rules = config.route.rules.filter(rule => {
-    if (rule?.outbound !== 'direct') return true
+    if (rule?.outbound !== 'direct') {
+      return true
+    }
 
     const ipCidr = rule?.ip_cidr
+
     if (typeof ipCidr === 'string') {
-      return !cidrs.includes(ipCidr)
+      return !managedCidrs.includes(ipCidr)
     }
 
     if (Array.isArray(ipCidr)) {
-      return !ipCidr.some(item => cidrs.includes(item))
+      return !ipCidr.some(item => managedCidrs.includes(item))
     }
 
     return true
   })
 
-  config.route.rules.unshift(...cidrs.map(cidr => ({
-    ip_cidr: cidr,
-    outbound: 'direct'
-  })))
+  config.route.rules.unshift(...serverDirectRules)
 }
 
 if (config.experimental?.clash_api?.external_ui_http_client) {
