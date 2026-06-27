@@ -1,0 +1,241 @@
+{
+  "log": {
+    "level": "error"
+  },
+  "http_clients": [
+    {
+      "tag": "direct"
+    }
+  ],
+  "experimental": {
+    "clash_api": {
+      "external_controller": "127.0.0.1:9090",
+      "external_ui": "ui",
+      "secret": "",
+      "external_ui_download_url": "https://ghfast.top/github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip",
+      "default_mode": "rule"
+    },
+    "cache_file": {
+      "enabled": true
+    }
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "google",
+        "type": "tls",
+        "server": "8.8.8.8",
+        "detour": "Proxy"
+      },
+      {
+        "tag": "local",
+        "type": "udp",
+        "server": "223.5.5.5"
+      },
+      {
+        "tag": "public",
+        "type": "https",
+        "server": "dns.alidns.com",
+        "domain_resolver": "local"
+      }
+    ],
+    "rules": [
+      {
+        "clash_mode": "direct",
+        "action": "route",
+        "server": "local"
+      },
+      {
+        "clash_mode": "global",
+        "action": "route",
+        "server": "google"
+      },
+      {
+        "domain_suffix": [
+          "ghfast.top",
+          "raw.githubusercontent.com",
+          "github.com",
+          "ghproxy.net",
+          "gh-proxy.com",
+          "testingcf.jsdelivr.net",
+          "cdn.jsdelivr.net"
+        ],
+        "action": "route",
+        "server": "local",
+        "strategy": "ipv4_only"
+      },
+      {
+        "rule_set": "geosite-cn",
+        "action": "route",
+        "server": "local"
+      },
+      {
+        "rule_set": "geosite-geolocation-!cn",
+        "action": "route",
+        "server": "google"
+      }
+    ],
+    "reverse_mapping": false,
+    "strategy": "ipv4_only",
+    "final": "google"
+  },
+  "inbounds": [
+    {
+      "tag": "tun-in",
+      "type": "tun",
+      "address": [
+        "172.19.0.1/30",
+        "fdfe:dcba:9876::1/126"
+      ],
+      "stack": "system",
+      "auto_route": true,
+      "strict_route": true,
+      "platform": {
+        "http_proxy": {
+          "enabled": true,
+          "server": "127.0.0.1",
+          "server_port": 7890
+        }
+      }
+    },
+    {
+      "tag": "mixed-in",
+      "type": "mixed",
+      "listen": "127.0.0.1",
+      "listen_port": 7890
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "__HOME_PLACEHOLDER__"
+    },
+    {
+      "tag": "Proxy",
+      "type": "selector",
+      "outbounds": [
+        "direct"
+      ],
+      "default": "direct"
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "default_domain_resolver": "local",
+    "auto_detect_interface": true,
+    "final": "Proxy",
+    "rules": [
+      {
+        "ip_version": 6,
+        "action": "reject"
+      },
+      {
+        "inbound": [
+          "tun-in",
+          "mixed-in"
+        ],
+        "action": "sniff"
+      },
+      {
+        "type": "logical",
+        "mode": "or",
+        "rules": [
+          {
+            "port": 53
+          },
+          {
+            "protocol": "dns"
+          }
+        ],
+        "action": "hijack-dns"
+      },
+      {
+        "ip_cidr": [
+          "192.168.1.0/24"
+        ],
+        "outbound": "home"
+      },
+      {
+        "domain_suffix": [
+          "weixin.qq.com",
+          "wx.qq.com",
+          "qpic.cn",
+          "gtimg.com",
+          "qlogo.cn",
+          "tenpay.com",
+          "wechat.com",
+          "mmbiz.qpic.cn",
+          "mmbiz.qlogo.cn"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "rule_set": "geosite-category-ads-all",
+        "clash_mode": "rule",
+        "action": "reject"
+      },
+      {
+        "clash_mode": "direct",
+        "outbound": "direct"
+      },
+      {
+        "clash_mode": "global",
+        "outbound": "Proxy"
+      },
+      {
+        "domain": [
+          "clash.razord.top",
+          "yacd.metacubex.one",
+          "yacd.haishan.me",
+          "d.metacubex.one"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "ip_is_private": true,
+        "outbound": "direct"
+      },
+      {
+        "rule_set": "geosite-geolocation-!cn",
+        "outbound": "Proxy"
+      },
+      {
+        "rule_set": [
+          "geoip-cn",
+          "geosite-cn"
+        ],
+        "outbound": "direct"
+      }
+    ],
+    "rule_set": [
+      {
+        "tag": "geosite-category-ads-all",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ads-all.srs"
+      },
+      {
+        "tag": "geosite-geolocation-!cn",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-!cn.srs"
+      },
+      {
+        "tag": "geoip-cn",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/cn.srs"
+      },
+      {
+        "tag": "geosite-cn",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs"
+      }
+    ],
+    "default_http_client": "direct"
+  }
+}
