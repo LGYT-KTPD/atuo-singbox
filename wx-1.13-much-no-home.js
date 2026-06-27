@@ -1,4 +1,4 @@
-// Windows sing-box 1.13.11 专用：机场多分组 no-home
+// Windows sing-box 1.13.14 专用：机场多分组 no-home
 // 不使用 http_clients / route.default_http_client
 // 不使用 selector.default / urltest.default
 // 规则下载使用 download_detour: direct
@@ -40,11 +40,56 @@ function uniq(arr) {
   return [...new Set(arr.filter(Boolean))]
 }
 
+
+function isPublicIPv4Cidr32(cidr) {
+  if (typeof cidr !== 'string') return false
+
+  const match = cidr.match(/^(\d{1,3}(?:\.\d{1,3}){3})\/32$/)
+  if (!match) return false
+
+  const parts = match[1].split('.').map(Number)
+  if (parts.length !== 4 || parts.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return false
+
+  const [a, b] = parts
+  if (a === 0 || a === 10 || a === 127) return false
+  if (a === 172 && b >= 16 && b <= 31) return false
+  if (a === 192 && b === 168) return false
+  if (a === 169 && b === 254) return false
+  if (a >= 224) return false
+
+  return true
+}
+
+function removePublicDirect32Rules() {
+  if (!config.route) config.route = {}
+  if (!Array.isArray(config.route.rules)) config.route.rules = []
+
+  config.route.rules = config.route.rules
+    .map(rule => {
+      if (rule?.outbound !== 'direct') return rule
+
+      const ipCidr = rule?.ip_cidr
+
+      if (typeof ipCidr === 'string') {
+        return isPublicIPv4Cidr32(ipCidr) ? null : rule
+      }
+
+      if (Array.isArray(ipCidr)) {
+        const kept = ipCidr.filter(item => !isPublicIPv4Cidr32(item))
+        if (kept.length === 0) return null
+        if (kept.length !== ipCidr.length) return { ...rule, ip_cidr: kept }
+      }
+
+      return rule
+    })
+    .filter(Boolean)
+}
+
 if (config.experimental?.clash_api?.external_ui_http_client) {
   delete config.experimental.clash_api.external_ui_http_client
 }
 
-// Windows 1.13.11 不支持这些
+// Windows 1.13.14 不支持这些
 delete config.http_clients
 
 if (!config.route) config.route = {}
@@ -304,7 +349,7 @@ if (!proxyGroup) {
   throw new Error('最终配置中 Proxy 组不存在或格式错误')
 }
 
-// Windows 1.13.11 默认由 outbounds 第一个节点决定
+// Windows 1.13.14 默认由 outbounds 第一个节点决定
 proxyGroup.outbounds = uniq([
   ...proxyTags,
   'direct'
@@ -367,10 +412,12 @@ if (!localDns) {
   throw new Error('缺少 local DNS，route.default_domain_resolver 会失效')
 }
 
+removePublicDirect32Rules()
+
 $content = JSON.stringify(config, null, 2)
 
 function log(v) {
-  console.log(`[📦 Windows 1.13.11 no-home 多分组脚本] ${v}`)
+  console.log(`[📦 Windows 1.13.14 no-home 多分组脚本] ${v}`)
 }
 
 log('✅ 完成')
