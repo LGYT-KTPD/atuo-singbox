@@ -117,6 +117,51 @@ requireEnv([
   'WG_PEER_PUBLIC_KEY'
 ])
 
+
+function isPublicIPv4Cidr32(cidr) {
+  if (typeof cidr !== 'string') return false
+
+  const match = cidr.match(/^(\d{1,3}(?:\.\d{1,3}){3})\/32$/)
+  if (!match) return false
+
+  const parts = match[1].split('.').map(Number)
+  if (parts.length !== 4 || parts.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return false
+
+  const [a, b] = parts
+  if (a === 0 || a === 10 || a === 127) return false
+  if (a === 172 && b >= 16 && b <= 31) return false
+  if (a === 192 && b === 168) return false
+  if (a === 169 && b === 254) return false
+  if (a >= 224) return false
+
+  return true
+}
+
+function removePublicDirect32Rules() {
+  if (!config.route) config.route = {}
+  if (!Array.isArray(config.route.rules)) config.route.rules = []
+
+  config.route.rules = config.route.rules
+    .map(rule => {
+      if (rule?.outbound !== 'direct') return rule
+
+      const ipCidr = rule?.ip_cidr
+
+      if (typeof ipCidr === 'string') {
+        return isPublicIPv4Cidr32(ipCidr) ? null : rule
+      }
+
+      if (Array.isArray(ipCidr)) {
+        const kept = ipCidr.filter(item => !isPublicIPv4Cidr32(item))
+        if (kept.length === 0) return null
+        if (kept.length !== ipCidr.length) return { ...rule, ip_cidr: kept }
+      }
+
+      return rule
+    })
+    .filter(Boolean)
+}
+
 if (config.experimental?.clash_api?.external_ui_http_client) {
   delete config.experimental.clash_api.external_ui_http_client
 }
@@ -704,6 +749,8 @@ const localDns = config.dns?.servers?.find(s => s?.tag === 'local-dns')
 if (!localDns) {
   throw new Error('缺少 local-dns，route.default_domain_resolver 会失效')
 }
+
+removePublicDirect32Rules()
 
 $content = JSON.stringify(config, null, 2)
 
