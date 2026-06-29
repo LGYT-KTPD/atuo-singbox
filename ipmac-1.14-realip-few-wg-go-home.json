@@ -176,7 +176,7 @@
     ],
     "reverse_mapping": true,
     "strategy": "prefer_ipv4",
-    "final": "local-dns",
+    "final": "proxy-dns",
     "timeout": "3s",
     "cache_capacity": 65536,
     "optimistic": {
