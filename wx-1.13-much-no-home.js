@@ -1,7 +1,6 @@
 // Windows sing-box 1.13.14 专用：机场多分组 no-home
 // 不使用 http_clients / route.default_http_client
 // 不使用 selector.default / urltest.default
-// 规则下载使用 download_detour: direct
 // 默认节点由 outbounds 数组第一个真实代理节点决定
 
 log('🚀 开始')
