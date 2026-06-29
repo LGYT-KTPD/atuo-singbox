@@ -1,5 +1,5 @@
 // Windows sing-box 1.13.14 专用：自建节点少节点 no-home
-// 1.13.11 不使用 http_clients / route.default_http_client
+// 1.13.14 不使用 http_clients / route.default_http_client
 // 规则下载使用 download_detour: direct
 
 log('🚀 开始')
@@ -55,6 +55,37 @@ function ensureSelfBuiltServerDirectRule(proxies) {
   config.route.rules.unshift(...serverDirectRules)
 }
 
+
+function ensureTunDnsHijack() {
+  if (!Array.isArray(config.inbounds)) return
+
+  config.inbounds = config.inbounds.map(i => {
+    if (i?.type === 'tun' && i?.tag === 'tun-in') {
+      const tun = {
+        ...i,
+        stack: 'system',
+        auto_route: true,
+        strict_route: true,
+        dns_mode: 'hijack',
+        dns_address: '172.19.0.2',
+        endpoint_independent_nat: true
+      }
+
+      if (tun.platform?.http_proxy) {
+        delete tun.platform.http_proxy
+      }
+
+      if (tun.platform && Object.keys(tun.platform).length === 0) {
+        delete tun.platform
+      }
+
+      return tun
+    }
+
+    return i
+  })
+}
+
 if (config.experimental?.clash_api?.external_ui_http_client) {
   delete config.experimental.clash_api.external_ui_http_client
 }
@@ -67,6 +98,13 @@ delete config.route.default_http_client
 
 if (!config.dns) config.dns = {}
 if (!Array.isArray(config.dns.rules)) config.dns.rules = []
+
+// DNS-v2：正常运行默认 DNS 走代理 DNS google，local 只用于启动、下载、CN、微信等例外
+config.dns.final = 'google'
+config.dns.strategy = 'prefer_ipv4'
+config.dns.reverse_mapping = true
+config.dns.timeout = '3s'
+config.dns.cache_capacity = 65536
 
 if (Array.isArray(config.dns.servers)) {
   config.dns.servers = config.dns.servers.map(s => {
@@ -270,12 +308,13 @@ if (!localDns) {
   throw new Error('缺少 local DNS，route.default_domain_resolver 会失效')
 }
 
+ensureTunDnsHijack()
 ensureSelfBuiltServerDirectRule(proxies)
 
 $content = JSON.stringify(config, null, 2)
 
 function log(v) {
-  console.log(`[📦 Windows 1.13.14 自建节点 no-home 脚本] ${v}`)
+  console.log(`[📦 Windows 1.13.14 DNS-v2 自建节点 no-home 脚本] ${v}`)
 }
 
 log('✅ 完成')
