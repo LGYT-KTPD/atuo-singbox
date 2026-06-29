@@ -1,6 +1,6 @@
 {
   "log": {
-    "level": "error"
+    "level": "err"
   },
   "experimental": {
     "clash_api": {
