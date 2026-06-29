@@ -12,7 +12,8 @@
       "default_mode": "rule"
     },
     "cache_file": {
-      "enabled": true
+      "enabled": true,
+      "store_dns": true
     }
   },
   "dns": {
@@ -96,9 +97,11 @@
         "server": "google"
       }
     ],
-    "reverse_mapping": false,
-    "strategy": "ipv4_only",
-    "final": "google"
+    "reverse_mapping": true,
+    "strategy": "prefer_ipv4",
+    "final": "google",
+    "timeout": "3s",
+    "cache_capacity": 65536
   },
   "inbounds": [
     {
@@ -110,7 +113,10 @@
       ],
       "stack": "system",
       "auto_route": true,
-      "strict_route": true
+      "strict_route": true,
+      "dns_mode": "hijack",
+      "dns_address": "172.19.0.2",
+      "endpoint_independent_nat": true
     },
     {
       "tag": "mixed-in",
