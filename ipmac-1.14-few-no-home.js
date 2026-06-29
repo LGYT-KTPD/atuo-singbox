@@ -1,10 +1,10 @@
 // iPhone / Mac sing-box 1.14-alpha：自建少节点 no-home
-// 2026-06-25 RealIP 稳定版
+// 2026-06-28 RealIP DNS-v2 长期版
 // 无 FakeIP + DNS Hijack + Sniff + Apple Direct + 微信 Direct
 // 保留 UDP/QUIC，不屏蔽 UDP 443
 // 吸收 alpha.33/34：route-options + udp_connect + resolve + endpoint_independent_nat
 
-console.log('🚀 开始生成 no-home 配置（2026-06-25 RealIP 稳定版）')
+console.log('🚀 开始生成 no-home 配置（2026-06-28 RealIP DNS-v2 长期版）')
 
 let { type, name, includeUnsupportedProxy, url } = $arguments
 type = /^1$|col|组合/i.test(type) ? 'collection' : 'subscription'
@@ -210,8 +210,8 @@ config.dns.optimistic = {
   timeout: '1h0m0s'
 }
 
-// 关键：RealIP 稳定版 DNS final 走 local-dns，避免启动期 proxy-dns 自循环
-config.dns.final = 'local-dns'
+// DNS-v2：启动/bootstrap 依赖 hosts-fix/local-dns，运行期默认 DNS 走 proxy-dns，避免 BrowserLeaks 暴露国内 DNS
+config.dns.final = 'proxy-dns'
 
 // http client v2：区分 direct / proxy
 config.http_clients = config.http_clients.filter(c =>
@@ -232,6 +232,7 @@ config.http_clients.unshift(
 )
 
 config.route.default_http_client = 'direct'
+// route 解析器仍走 local-dns：用于启动期、rule-set 下载和直连域名解析，不作为 DNS final
 config.route.default_domain_resolver = 'local-dns'
 config.route.auto_detect_interface = true
 config.route.final = 'Proxy'
@@ -781,4 +782,4 @@ ensureProxyServerDirectRules(proxies)
 
 $content = JSON.stringify(config, null, 2)
 
-console.log('✅ 完成 no-home 配置生成（2026-06-25 RealIP 稳定版）')
+console.log('✅ 完成 no-home 配置生成（2026-06-28 RealIP DNS-v2 长期版）')
