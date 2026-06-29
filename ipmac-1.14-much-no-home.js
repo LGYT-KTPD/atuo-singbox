@@ -1,7 +1,7 @@
-// iPhone / Mac sing-box 1.14-alpha：机场多分组多节点 no-home
-// 无 FakeIP 稳定版：DoT + DNS Hijack + Sniff + Apple Direct 扩大 + endpoint_independent_nat
+// iPhone / Mac sing-box 1.14.0-alpha.36：机场多分组多节点 no-home
+// RealIP DNS-v2 alpha36 长期版：DoT + DNS Hijack + Sniff + Apple Direct 扩大 + endpoint_independent_nat
 
-console.log('🚀 开始生成多分组 no-home 配置（No FakeIP 稳定版）')
+console.log('🚀 开始生成多分组 no-home 配置（RealIP DNS-v2 alpha36 长期版）')
 
 let { type, name, outbound, includeUnsupportedProxy, url } = $arguments
 type = /^1$|col|组合/i.test(type) ? 'collection' : 'subscription'
@@ -154,6 +154,7 @@ config.http_clients.unshift({
 })
 
 config.route.default_http_client = 'direct'
+// route 解析器仍走 local-dns：用于启动期、rule-set 下载、直连域名解析；不作为 DNS final
 config.route.default_domain_resolver = 'local-dns'
 
 // DNS servers 重建
@@ -665,4 +666,4 @@ removePublicDirect32Rules()
 
 $content = JSON.stringify(config, null, 2)
 
-console.log('✅ 完成多分组 no-home 配置生成（No FakeIP 稳定版）')
+console.log('✅ 完成多分组 no-home 配置生成（RealIP DNS-v2 alpha36 长期版）')
