@@ -1,4 +1,4 @@
-// Windows sing-box 1.13.14 专用：自建节点少节点 no-home
+// Windows sing-box 1.13.14 稳定版：自建节点少节点 no-home
 // 1.13.14 不使用 http_clients / route.default_http_client
 // 规则下载使用 download_detour: direct
 
@@ -56,6 +56,48 @@ function ensureSelfBuiltServerDirectRule(proxies) {
 }
 
 
+function ensureWindowsTunCompatible() {
+  if (!Array.isArray(config.inbounds)) return
+
+  config.inbounds = config.inbounds.map(i => {
+    if (i?.type === 'tun' && i?.tag === 'tun-in') {
+      const tun = {
+        ...i,
+        stack: 'system',
+        auto_route: true,
+        strict_route: true
+      }
+
+      delete tun.dns_mode
+      delete tun.dns_address
+      delete tun.endpoint_independent_nat
+
+      if (tun.platform?.http_proxy) {
+        delete tun.platform.http_proxy
+      }
+
+      if (tun.platform && Object.keys(tun.platform).length === 0) {
+        delete tun.platform
+      }
+
+      return tun
+    }
+
+    return i
+  })
+}
+
+function removeSelectorDefaultForWindows113() {
+  if (!Array.isArray(config.outbounds)) return
+
+  config.outbounds = config.outbounds.map(o => {
+    if (o && typeof o === 'object') {
+      delete o.default
+    }
+    return o
+  })
+}
+
 if (config.experimental?.clash_api?.external_ui_http_client) {
   delete config.experimental.clash_api.external_ui_http_client
 }
@@ -69,12 +111,12 @@ delete config.route.default_http_client
 if (!config.dns) config.dns = {}
 if (!Array.isArray(config.dns.rules)) config.dns.rules = []
 
-// DNS-v2：正常运行默认 DNS 走代理 DNS google，local 只用于启动、下载、CN、微信等例外
+// DNS-v2：正常运行默认 DNS 走代理 DNS google；local 仅用于启动、规则下载、CN、微信等直连例外
 config.dns.final = 'google'
-config.dns.strategy = 'prefer_ipv4'
-config.dns.reverse_mapping = true
-config.dns.timeout = '3s'
-// Windows 1.13.14 保守兼容：TUN 只保留 stack/auto_route/strict_route，DNS 劫持依赖 route.rules hijack-dns
+config.dns.strategy = 'ipv4_only'
+config.dns.reverse_mapping = false
+delete config.dns.cache_capacity
+delete config.dns.optimistic
 
 if (Array.isArray(config.dns.servers)) {
   config.dns.servers = config.dns.servers.map(s => {
@@ -238,8 +280,8 @@ proxyGroup.outbounds = [
   'direct'
 ]
 
-// 关键修复：Windows 自建节点 no-home 默认必须走第一个代理节点，不能默认 direct
-proxyGroup.default = proxyTags[0] || 'direct'
+// Windows 1.13.14：不使用 selector.default，默认由 Proxy.outbounds 第一个真实节点决定
+delete proxyGroup.default
 
 config.outbounds = config.outbounds.filter(o => o?.tag !== 'auto')
 
@@ -278,12 +320,14 @@ if (!localDns) {
   throw new Error('缺少 local DNS，route.default_domain_resolver 会失效')
 }
 
+ensureWindowsTunCompatible()
+removeSelectorDefaultForWindows113()
 ensureSelfBuiltServerDirectRule(proxies)
 
 $content = JSON.stringify(config, null, 2)
 
 function log(v) {
-  console.log(`[📦 Windows 1.13.14 DNS-v2 自建节点 no-home 脚本 fixed] ${v}`)
+  console.log(`[📦 Windows 1.13.14 stable DNS-v2 自建节点 no-home 脚本] ${v}`)
 }
 
 log('✅ 完成')
