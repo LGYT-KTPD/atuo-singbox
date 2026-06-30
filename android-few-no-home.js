@@ -56,35 +56,6 @@ function ensureSelfBuiltServerDirectRule(proxies) {
 }
 
 
-function ensureTunDnsHijack() {
-  if (!Array.isArray(config.inbounds)) return
-
-  config.inbounds = config.inbounds.map(i => {
-    if (i?.type === 'tun' && i?.tag === 'tun-in') {
-      const tun = {
-        ...i,
-        stack: 'system',
-        auto_route: true,
-        strict_route: true,
-        dns_mode: 'hijack',
-        dns_address: '172.19.0.2',
-        endpoint_independent_nat: true
-      }
-
-      if (tun.platform?.http_proxy) {
-        delete tun.platform.http_proxy
-      }
-
-      if (tun.platform && Object.keys(tun.platform).length === 0) {
-        delete tun.platform
-      }
-
-      return tun
-    }
-
-    return i
-  })
-}
 
 function removeWindowsProcessRules() {
   if (Array.isArray(config.route?.rules)) {
@@ -111,10 +82,8 @@ if (!Array.isArray(config.dns.rules)) config.dns.rules = []
 
 // DNS-v2：正常运行默认 DNS 走代理 DNS google，local 只用于启动、下载、CN、微信等例外
 config.dns.final = 'google'
-config.dns.strategy = 'prefer_ipv4'
-config.dns.reverse_mapping = true
-config.dns.timeout = '3s'
-config.dns.cache_capacity = 65536
+config.dns.strategy = 'ipv4_only'
+config.dns.reverse_mapping = false
 
 if (Array.isArray(config.dns.servers)) {
   config.dns.servers = config.dns.servers.map(s => {
@@ -319,13 +288,12 @@ if (!localDns) {
 }
 
 removeWindowsProcessRules()
-ensureTunDnsHijack()
 ensureSelfBuiltServerDirectRule(proxies)
 
 $content = JSON.stringify(config, null, 2)
 
 function log(v) {
-  console.log(`[📦 Android 1.13.14 DNS-v2 自建节点 no-home 脚本] ${v}`)
+  console.log(`[📦 Android 1.13.14 stable 自建节点 no-home 脚本] ${v}`)
 }
 
 log('✅ 完成')
