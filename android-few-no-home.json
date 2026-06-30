@@ -88,11 +88,10 @@
         "server": "google"
       }
     ],
-    "reverse_mapping": true,
-    "strategy": "prefer_ipv4",
+    "reverse_mapping": false,
+    "strategy": "ipv4_only",
     "final": "google",
-    "timeout": "3s",
-    "cache_capacity": 65536
+    "timeout": "3s"
   },
   "inbounds": [
     {
@@ -104,10 +103,7 @@
       ],
       "stack": "system",
       "auto_route": true,
-      "strict_route": true,
-      "dns_mode": "hijack",
-      "dns_address": "172.19.0.2",
-      "endpoint_independent_nat": true
+      "strict_route": true
     },
     {
       "tag": "mixed-in",
