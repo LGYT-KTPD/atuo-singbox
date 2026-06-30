@@ -1,6 +1,7 @@
-// Windows sing-box 1.13.14 专用：机场多分组 no-home
+// Windows sing-box 1.13.14 稳定版：机场多分组 no-home
 // 不使用 http_clients / route.default_http_client
 // 不使用 selector.default / urltest.default
+// 规则下载使用 download_detour: direct
 // 默认节点由 outbounds 数组第一个真实代理节点决定
 
 log('🚀 开始')
@@ -84,37 +85,6 @@ function removePublicDirect32Rules() {
     .filter(Boolean)
 }
 
-
-function ensureTunDnsHijack() {
-  if (!Array.isArray(config.inbounds)) return
-
-  config.inbounds = config.inbounds.map(i => {
-    if (i?.type === 'tun' && i?.tag === 'tun-in') {
-      const tun = {
-        ...i,
-        stack: 'system',
-        auto_route: true,
-        strict_route: true,
-        dns_mode: 'hijack',
-        dns_address: '172.19.0.2',
-        endpoint_independent_nat: true
-      }
-
-      if (tun.platform?.http_proxy) {
-        delete tun.platform.http_proxy
-      }
-
-      if (tun.platform && Object.keys(tun.platform).length === 0) {
-        delete tun.platform
-      }
-
-      return tun
-    }
-
-    return i
-  })
-}
-
 if (config.experimental?.clash_api?.external_ui_http_client) {
   delete config.experimental.clash_api.external_ui_http_client
 }
@@ -128,13 +98,6 @@ delete config.route.default_http_client
 
 if (!config.dns) config.dns = {}
 if (!Array.isArray(config.dns.rules)) config.dns.rules = []
-
-// DNS-v2：正常运行默认 DNS 走代理 DNS google，local 只用于启动、下载、CN、微信等例外
-config.dns.final = 'google'
-config.dns.strategy = 'prefer_ipv4'
-config.dns.reverse_mapping = true
-config.dns.timeout = '3s'
-config.dns.cache_capacity = 65536
 
 // DNS servers 修正
 if (Array.isArray(config.dns.servers)) {
@@ -173,7 +136,7 @@ if (Array.isArray(config.route.rules)) {
   )
 }
 
-// 删除所有 1.13.11 不支持的 default 字段
+// 删除所有 1.13.14 不支持的 default 字段
 if (Array.isArray(config.outbounds)) {
   config.outbounds = config.outbounds.map(o => {
     if (o && typeof o === 'object') {
@@ -449,13 +412,12 @@ if (!localDns) {
   throw new Error('缺少 local DNS，route.default_domain_resolver 会失效')
 }
 
-ensureTunDnsHijack()
 removePublicDirect32Rules()
 
 $content = JSON.stringify(config, null, 2)
 
 function log(v) {
-  console.log(`[📦 Windows 1.13.14 DNS-v2 no-home 多分组脚本] ${v}`)
+  console.log(`[📦 Windows 1.13.14 no-home 多分组脚本] ${v}`)
 }
 
 log('✅ 完成')
