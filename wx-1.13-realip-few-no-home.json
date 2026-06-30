@@ -97,10 +97,9 @@
         "server": "google"
       }
     ],
-    "reverse_mapping": true,
-    "strategy": "prefer_ipv4",
-    "final": "google",
-    "timeout": "3s"
+    "reverse_mapping": false,
+    "strategy": "ipv4_only",
+    "final": "google"
   },
   "inbounds": [
     {
@@ -128,8 +127,7 @@
       "outbounds": [
         "__PROXY_PLACEHOLDER__",
         "direct"
-      ],
-      "default": "__PROXY_PLACEHOLDER__"
+      ]
     },
     {
       "type": "direct",
