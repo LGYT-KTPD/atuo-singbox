@@ -12,8 +12,7 @@
       "default_mode": "rule"
     },
     "cache_file": {
-      "enabled": true,
-      "store_dns": true
+      "enabled": true
     }
   },
   "dns": {
@@ -127,7 +126,8 @@
       "outbounds": [
         "__PROXY_PLACEHOLDER__",
         "direct"
-      ]
+      ],
+      "default": "__PROXY_PLACEHOLDER__"
     },
     {
       "type": "direct",
