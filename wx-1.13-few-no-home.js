@@ -270,6 +270,8 @@ if (!localDns) {
   throw new Error('缺少 local DNS，route.default_domain_resolver 会失效')
 }
 
+ensureSelfBuiltServerDirectRule(proxies)
+
 $content = JSON.stringify(config, null, 2)
 
 function log(v) {
