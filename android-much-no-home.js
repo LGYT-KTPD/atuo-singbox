@@ -1,9 +1,4 @@
-// Android sing-box 1.13.14 DNS-v2 修正版：机场多分组 no-home
-// 不使用 http_clients / route.default_http_client
-// 不使用 selector.default / urltest.default
-// 规则下载使用 download_detour: direct
-// 默认节点由 outbounds 数组第一个真实代理节点决定
-
+// Android sing-box 1.13.14：机场多节点 much no-home（RealIP）
 log('🚀 开始')
 
 let { type, name, outbound, includeUnsupportedProxy, url } = $arguments
@@ -18,454 +13,178 @@ try {
   throw new Error(`配置解析失败: ${e.message}`)
 }
 
-function getTags(proxies, regex) {
-  return (regex ? proxies.filter(p => regex.test(p.tag)) : proxies).map(p => p.tag)
-}
-
 function createTagRegExp(tagPattern) {
-  return new RegExp(
-    tagPattern.replace('ℹ️', ''),
-    tagPattern.includes('ℹ️') ? 'i' : undefined
-  )
+  return new RegExp(tagPattern.replace('ℹ️', ''), tagPattern.includes('ℹ️') ? 'i' : undefined)
 }
 
 function createOutboundRegExp(outboundPattern) {
-  return new RegExp(
-    outboundPattern.replace('ℹ️', ''),
-    outboundPattern.includes('ℹ️') ? 'i' : undefined
-  )
+  return new RegExp(outboundPattern.replace('ℹ️', ''), outboundPattern.includes('ℹ️') ? 'i' : undefined)
+}
+
+function getTags(proxies, regex) {
+  return (regex ? proxies.filter(p => regex.test(p.tag)) : proxies).map(p => p.tag)
 }
 
 function uniq(arr) {
   return [...new Set(arr.filter(Boolean))]
 }
 
+function normalizeConfig() {
+  delete config.http_clients
 
-function isPublicIPv4Cidr32(cidr) {
-  if (typeof cidr !== 'string') return false
-
-  const match = cidr.match(/^(\d{1,3}(?:\.\d{1,3}){3})\/32$/)
-  if (!match) return false
-
-  const parts = match[1].split('.').map(Number)
-  if (parts.length !== 4 || parts.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return false
-
-  const [a, b] = parts
-  if (a === 0 || a === 10 || a === 127) return false
-  if (a === 172 && b >= 16 && b <= 31) return false
-  if (a === 192 && b === 168) return false
-  if (a === 169 && b === 254) return false
-  if (a >= 224) return false
-
-  return true
-}
-
-function removePublicDirect32Rules() {
-  if (!config.route) config.route = {}
-  if (!Array.isArray(config.route.rules)) config.route.rules = []
-
-  config.route.rules = config.route.rules
-    .map(rule => {
-      if (rule?.outbound !== 'direct') return rule
-
-      const ipCidr = rule?.ip_cidr
-
-      if (typeof ipCidr === 'string') {
-        return isPublicIPv4Cidr32(ipCidr) ? null : rule
-      }
-
-      if (Array.isArray(ipCidr)) {
-        const kept = ipCidr.filter(item => !isPublicIPv4Cidr32(item))
-        if (kept.length === 0) return null
-        if (kept.length !== ipCidr.length) return { ...rule, ip_cidr: kept }
-      }
-
-      return rule
-    })
-    .filter(Boolean)
-}
-
-
-function ensureTunDnsHijack() {
-  if (!Array.isArray(config.inbounds)) return
-
-  config.inbounds = config.inbounds.map(i => {
-    if (i?.type === 'tun' && i?.tag === 'tun-in') {
-      const tun = {
-        ...i,
-        stack: 'system',
-        auto_route: true,
-        strict_route: true,
-        dns_mode: 'hijack',
-        dns_address: '172.19.0.2',
-        endpoint_independent_nat: true
-      }
-
-      if (tun.platform?.http_proxy) {
-        delete tun.platform.http_proxy
-      }
-
-      if (tun.platform && Object.keys(tun.platform).length === 0) {
-        delete tun.platform
-      }
-
-      return tun
-    }
-
-    return i
-  })
-}
-
-function removeWindowsProcessRules() {
-  if (Array.isArray(config.route?.rules)) {
-    config.route.rules = config.route.rules.filter(r => !(r && typeof r === 'object' && r.process_name))
+  if (config.experimental?.clash_api?.external_ui_http_client) {
+    delete config.experimental.clash_api.external_ui_http_client
   }
 
-  if (Array.isArray(config.dns?.rules)) {
-    config.dns.rules = config.dns.rules.filter(r => !(r && typeof r === 'object' && r.process_name))
+  if (config.experimental?.cache_file) {
+    delete config.experimental.cache_file['store_' + 'dns']
+    delete config.experimental.cache_file['store_' + 'fakeip']
+    delete config.experimental.cache_file.store_rdrc
+    delete config.experimental.cache_file.rdrc_timeout
   }
-}
 
-if (config.experimental?.clash_api?.external_ui_http_client) {
-  delete config.experimental.clash_api.external_ui_http_client
-}
+  if (!config.dns) config.dns = {}
+  if (!Array.isArray(config.dns.servers)) config.dns.servers = []
+  if (!Array.isArray(config.dns.rules)) config.dns.rules = []
 
-// Android 1.13.14 不支持这些
-delete config.http_clients
+  delete config.dns.cache_capacity
+  delete config.dns.optimistic
+  delete config.dns.fakeip
 
-if (!config.route) config.route = {}
-config.route.default_domain_resolver = 'local'
-delete config.route.default_http_client
+  config.dns.servers = config.dns.servers.filter(s => s?.type !== 'fakeip' && s?.tag !== 'fakeip')
+  config.dns.rules = config.dns.rules.filter(r => r?.server !== 'fakeip')
+  config.dns.final = 'ggdns'
+  config.dns.strategy = 'ipv4_only'
+  config.dns.reverse_mapping = true
 
-if (!config.dns) config.dns = {}
-if (!Array.isArray(config.dns.rules)) config.dns.rules = []
-
-// DNS-v2：正常运行默认 DNS 走代理 DNS google，local 只用于启动、下载、CN、微信等例外
-config.dns.final = 'google'
-config.dns.strategy = 'prefer_ipv4'
-config.dns.reverse_mapping = true
-config.dns.timeout = '3s'
-config.dns.cache_capacity = 65536
-
-// DNS servers 修正
-if (Array.isArray(config.dns.servers)) {
+  if (!config.dns.servers.some(s => s?.tag === 'hosts_fix')) {
+    config.dns.servers.unshift({ type: 'hosts', tag: 'hosts_fix', predefined: { 'dns.google': ['8.8.8.8', '8.8.4.4'] } })
+  }
+  if (!config.dns.servers.some(s => s?.tag === 'local')) {
+    config.dns.servers.push({ type: 'local', tag: 'local' })
+  }
+  if (!config.dns.servers.some(s => s?.tag === 'ggdns')) {
+    config.dns.servers.push({ type: 'https', tag: 'ggdns', detour: 'proxy', domain_resolver: 'hosts_fix', server: 'dns.google' })
+  }
   config.dns.servers = config.dns.servers.map(s => {
-    if (s?.tag === 'google' || s?.tag === 'proxy-dns') {
-      return {
-        ...s,
-        detour: 'Proxy'
-      }
-    }
-
-    if (s?.tag === 'public') {
-      return {
-        ...s,
-        domain_resolver: 'local'
-      }
-    }
-
+    if (s?.tag === 'ggdns') return { ...s, type: 'https', detour: 'proxy', domain_resolver: 'hosts_fix', server: s.server || 'dns.google' }
     return s
   })
-}
 
-// no-home：删除 home / wg-home
-if (Array.isArray(config.outbounds)) {
-  config.outbounds = config.outbounds.filter(o =>
-    o?.tag !== 'home' &&
-    o?.tag !== '__HOME_PLACEHOLDER__' &&
-    o?.tag !== 'wg-home'
-  )
-}
+  if (!config.route) config.route = {}
+  delete config.route.default_http_client
+  config.route.default_domain_resolver = 'local'
+  config.route.auto_detect_interface = true
+  config.route.final = 'proxy'
 
-if (Array.isArray(config.route.rules)) {
-  config.route.rules = config.route.rules.filter(r =>
-    r?.outbound !== 'home' &&
-    r?.outbound !== 'wg-home'
-  )
-}
-
-// 删除所有 1.13.11 不支持的 default 字段
-if (Array.isArray(config.outbounds)) {
-  config.outbounds = config.outbounds.map(o => {
-    if (o && typeof o === 'object') {
-      delete o.default
-    }
-    return o
-  })
-}
-
-// 规则下载域名走 local，避免 rule-set 下载依赖 Proxy
-const downloadDomains = [
-  'ghfast.top',
-  'raw.githubusercontent.com',
-  'github.com',
-  'gh-proxy.com',
-  'ghproxy.net',
-  'testingcf.jsdelivr.net',
-  'cdn.jsdelivr.net'
-]
-
-let downloadDnsRule = config.dns.rules.find(r =>
-  r?.server === 'local' &&
-  Array.isArray(r?.domain_suffix) &&
-  (
-    r.domain_suffix.includes('ghfast.top') ||
-    r.domain_suffix.includes('testingcf.jsdelivr.net') ||
-    r.domain_suffix.includes('raw.githubusercontent.com')
-  )
-)
-
-if (!downloadDnsRule) {
-  downloadDnsRule = {
-    domain_suffix: [],
-    action: 'route',
-    server: 'local',
-    strategy: 'ipv4_only'
+  if (Array.isArray(config.route.rules)) {
+    config.route.rules = config.route.rules.filter(r => r?.ip_cidr !== '198.18.0.0/15' && r?.outbound !== 'home' && r?.outbound !== 'wg-home')
   }
 
-  config.dns.rules.splice(
-    Math.min(2, config.dns.rules.length),
-    0,
-    downloadDnsRule
-  )
-}
-
-downloadDomains.forEach(d => {
-  if (!downloadDnsRule.domain_suffix.includes(d)) {
-    downloadDnsRule.domain_suffix.push(d)
+  if (Array.isArray(config.route.rule_set)) {
+    config.route.rule_set = config.route.rule_set
+      .filter(rs => rs?.tag !== 'fakeip-filter')
+      .map(rs => {
+        delete rs.http_client
+        if (rs?.type === 'remote') rs.download_detour = 'DIRECT'
+        return rs
+      })
   }
-})
 
-// rule-set：1.13.11 使用 download_detour，不使用 http_client
-if (Array.isArray(config.route.rule_set)) {
-  config.route.rule_set = config.route.rule_set.map(rs => {
-    if (rs?.type === 'remote' && typeof rs.url === 'string') {
-      rs.url = rs.url
-        .replace(
-          'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/',
-          'https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/'
-        )
-        .replace(
-          'https://testingcf.jsdelivr.net/gh/Toperlock/sing-box-geosite@main/',
-          'https://ghfast.top/raw.githubusercontent.com/Toperlock/sing-box-geosite/main/'
-        )
-        .replace(
-          'https://raw.githubusercontent.com/',
-          'https://ghfast.top/raw.githubusercontent.com/'
-        )
-    }
+  if (Array.isArray(config.outbounds)) {
+    config.outbounds = config.outbounds.filter(o => o?.tag !== 'home' && o?.tag !== 'wg-home' && o?.tag !== '__HOME_PLACEHOLDER__')
+  }
 
-    delete rs.http_client
-
-    if (rs?.type === 'remote') {
-      rs.download_detour = 'direct'
-    }
-
-    return rs
-  })
+  if (Array.isArray(config.inbounds)) {
+    config.inbounds = config.inbounds.map(i => {
+      if (i?.type === 'tun' && i?.tag === 'tun-in') {
+        const tun = { ...i, mtu: i.mtu || 1500, auto_route: true, strict_route: true, udp_timeout: i.udp_timeout || '5m0s', stack: i.stack || 'mixed', endpoint_independent_nat: true }
+        delete tun.dns_mode
+        delete tun.dns_address
+        return tun
+      }
+      return i
+    })
+  }
 }
 
-// 获取代理节点
+normalizeConfig()
+
 let proxies
-
 if (url) {
   proxies = await produceArtifact({
-    name,
-    type,
-    platform: 'sing-box',
-    produceType: 'internal',
-    produceOpts: {
-      'include-unsupported-proxy': includeUnsupportedProxy,
-    },
-    subscription: {
-      name,
-      url,
-      source: 'remote',
-    },
+    name, type, platform: 'sing-box', produceType: 'internal',
+    produceOpts: { 'include-unsupported-proxy': includeUnsupportedProxy },
+    subscription: { name, url, source: 'remote' },
   })
 } else {
   proxies = await produceArtifact({
-    name,
-    type,
-    platform: 'sing-box',
-    produceType: 'internal',
-    produceOpts: {
-      'include-unsupported-proxy': includeUnsupportedProxy,
-    },
+    name, type, platform: 'sing-box', produceType: 'internal',
+    produceOpts: { 'include-unsupported-proxy': includeUnsupportedProxy },
   })
 }
 
 const proxyTags = proxies.map(p => p.tag)
+if (proxyTags.length === 0) throw new Error('没有获取到代理节点')
 
-if (proxyTags.length === 0) {
-  throw new Error('没有获取到代理节点')
-}
-
-// 删除旧注入节点、占位符、auto
 config.outbounds = config.outbounds.filter(o => {
   if (!o?.tag) return true
-  if (o.tag === 'direct') return true
-  if (o.tag === 'Proxy') return true
-  if (o.tag === 'COMPATIBLE') return false
-  // Android 版保留 auto，让 DNS/Proxy 优先走 urltest 选出的可用节点
+  if (['proxy', 'DIRECT', 'CN', 'Global', 'OpenAI', 'Google', 'Telegram', 'Twitter', 'Facebook', 'BiliBili', 'Bahamut', 'Spotify', 'TikTok', 'Netflix', 'Disney+', 'Apple', 'Microsoft', 'Games', 'Streaming', 'HongKong', 'TaiWan', 'Singapore', 'Japan', 'America', 'Others'].includes(o.tag)) return true
+  if (o.tag === 'AUTO' || o.tag === 'auto') return false
   if (o.tag === '__PROXY_PLACEHOLDER__') return false
   return !proxyTags.includes(o.tag)
 })
 
-// 多分组规则
 const outboundRules = (outbound || '')
   .split('🕳')
   .filter(Boolean)
   .map(i => {
     let [outboundPattern, tagPattern = '.*'] = i.split('🏷')
-    return [
-      createOutboundRegExp(outboundPattern),
-      createTagRegExp(tagPattern)
-    ]
+    return [createOutboundRegExp(outboundPattern), createTagRegExp(tagPattern)]
   })
 
-// 清理各分组里的 auto / 占位符 / home / wg-home / 旧 default
 config.outbounds.forEach(o => {
-  if (o && typeof o === 'object') {
-    delete o.default
-  }
-
   if (Array.isArray(o.outbounds)) {
-    o.outbounds = o.outbounds.filter(x =>
-      x !== '__PROXY_PLACEHOLDER__' &&
-      x !== 'home' &&
-      x !== 'wg-home'
-    )
+    o.outbounds = o.outbounds.filter(x => x !== 'auto' && x !== 'AUTO' && x !== '__PROXY_PLACEHOLDER__' && x !== 'home' && x !== 'wg-home')
   }
 })
 
-// 注入分组节点
 config.outbounds.forEach(o => {
   outboundRules.forEach(([outboundRegex, tagRegex]) => {
     if (outboundRegex.test(o.tag)) {
-      if (!Array.isArray(o.outbounds)) {
-        o.outbounds = []
-      }
-
-      const tags = getTags(proxies, tagRegex)
-      o.outbounds = uniq([
-        ...o.outbounds,
-        ...tags
-      ])
+      if (!Array.isArray(o.outbounds)) o.outbounds = []
+      o.outbounds = uniq([...o.outbounds, ...getTags(proxies, tagRegex)])
     }
   })
 })
 
-// 空组兜底
-const compatibleOutbound = {
-  tag: 'COMPATIBLE',
-  type: 'direct',
+for (const groupTag of ['HongKong', 'TaiWan', 'Singapore', 'Japan', 'America', 'Others']) {
+  const group = config.outbounds.find(o => o?.tag === groupTag && Array.isArray(o.outbounds))
+  if (group && group.outbounds.length === 0) {
+    group.outbounds = [...proxyTags]
+  }
 }
 
-let hasCompatible = config.outbounds.some(o => o?.tag === 'COMPATIBLE')
-
-config.outbounds.forEach(o => {
-  outboundRules.forEach(([outboundRegex]) => {
-    if (outboundRegex.test(o.tag)) {
-      if (!Array.isArray(o.outbounds)) {
-        o.outbounds = []
-      }
-
-      if (o.outbounds.length === 0) {
-        if (!hasCompatible) {
-          config.outbounds.push(compatibleOutbound)
-          hasCompatible = true
-        }
-
-        o.outbounds.push('COMPATIBLE')
-      }
-    }
-  })
-})
-
-// 注入代理节点
 config.outbounds.push(...proxies)
 
-// 修复 Proxy 主组
-const proxyGroup = config.outbounds.find(o =>
-  o?.tag === 'Proxy' &&
-  Array.isArray(o?.outbounds)
-)
+const proxyGroup = config.outbounds.find(o => o?.tag === 'proxy' && Array.isArray(o?.outbounds))
+if (!proxyGroup) throw new Error('模板中未找到 tag=proxy 的 selector')
 
-if (!proxyGroup) {
-  throw new Error('最终配置中 Proxy 组不存在或格式错误')
-}
+proxyGroup.outbounds = uniq(['Global', ...proxyTags, 'DIRECT'])
+proxyGroup.default = proxyGroup.outbounds[0]
 
-// Android 1.13.14 默认由 outbounds 第一个节点决定
-proxyGroup.outbounds = uniq([
-  'auto',
-  ...proxyTags,
-  'direct'
-])
+if (proxyGroup.outbounds[0] === 'DIRECT') throw new Error('proxy 组第一个不能是 DIRECT')
 
-delete proxyGroup.default
+const proxyDns = config.dns?.servers?.find(s => s?.tag === 'ggdns')
+if (!proxyDns || proxyDns.detour !== 'proxy') throw new Error('DNS 服务器 ggdns 必须 detour 到 proxy')
 
-// 确保 direct 存在
-if (!config.outbounds.some(o => o?.tag === 'direct')) {
-  config.outbounds.push({
-    type: 'direct',
-    tag: 'direct'
-  })
-}
-
-// 最后兜底：删除所有 selector/urltest 的 default
-config.outbounds.forEach(o => {
-  if (o && typeof o === 'object') {
-    delete o.default
-  }
-
-  if (
-    (o?.type === 'selector' || o?.type === 'urltest') &&
-    Array.isArray(o.outbounds)
-  ) {
-    o.outbounds = uniq(o.outbounds.filter(x =>
-      x !== '__PROXY_PLACEHOLDER__' &&
-      x !== 'home' &&
-      x !== 'wg-home'
-    ))
-  }
-})
-
-// 校验
-if (
-  proxyGroup.outbounds.includes('home') ||
-  proxyGroup.outbounds.includes('wg-home') ||
-  proxyGroup.outbounds.includes('__PROXY_PLACEHOLDER__')
-) {
-  throw new Error('no-home 配置中 Proxy 组不应包含 home / wg-home / placeholder')
-}
-
-if (proxyGroup.outbounds[0] === 'direct') {
-  throw new Error('Proxy 组第一个不能是 direct，否则国外流量会直连')
-}
-
-const proxyDns = config.dns?.servers?.find(s =>
-  s?.tag === 'google' ||
-  s?.tag === 'proxy-dns'
-)
-
-if (proxyDns && proxyDns.detour !== 'Proxy') {
-  throw new Error(`DNS 服务器 ${proxyDns.tag} 必须 detour 到 Proxy`)
-}
-
-const localDns = config.dns?.servers?.find(s => s?.tag === 'local')
-if (!localDns) {
-  throw new Error('缺少 local DNS，route.default_domain_resolver 会失效')
-}
-
-removeWindowsProcessRules()
-ensureTunDnsHijack()
-removePublicDirect32Rules()
+if (JSON.stringify(config).includes('store_dns')) throw new Error('Android 1.13.14 不支持 store_dns')
+if (JSON.stringify(config).includes('"fakeip"')) throw new Error('RealIP 配置不应包含 fakeip')
 
 $content = JSON.stringify(config, null, 2)
 
 function log(v) {
-  console.log(`[📦 Android 1.13.14 DNS-v2 no-home 多分组脚本] ${v}`)
+  console.log(`[📦 Android 1.13.14 RealIP much no-home] ${v}`)
 }
 
 log('✅ 完成')
