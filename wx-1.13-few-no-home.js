@@ -16,35 +16,73 @@ function isIPv4(value) {
     /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/.test(value)
 }
 
+function isPublicIPv4(value) {
+  if (!isIPv4(value)) return false
+
+  const [a, b] = value.split('.').map(Number)
+
+  if (a === 0 || a === 10 || a === 127) return false
+  if (a === 172 && b >= 16 && b <= 31) return false
+  if (a === 192 && b === 168) return false
+  if (a === 169 && b === 254) return false
+  if (a >= 224) return false
+
+  return true
+}
+
+function getProxyServerIPv4List(proxies) {
+  const servers = []
+
+  for (const proxy of proxies || []) {
+    const candidates = [
+      proxy?.server,
+      proxy?.address,
+      proxy?.host,
+      proxy?.server_address
+    ]
+
+    for (const item of candidates) {
+      if (isPublicIPv4(item)) {
+        servers.push(item)
+      }
+    }
+  }
+
+  return [...new Set(servers)]
+}
+
 function ensureSelfBuiltServerDirectRule(proxies) {
   if (!config.route) config.route = {}
   if (!Array.isArray(config.route.rules)) config.route.rules = []
 
-  const serverDirectRules = []
+  const servers = getProxyServerIPv4List(proxies)
 
-  for (const proxy of proxies || []) {
-    const server = proxy?.server
-    if (!isIPv4(server)) continue
-
-    serverDirectRules.push({
-      ip_cidr: `${server}/32`,
-      outbound: 'direct'
-    })
+  if (!servers.length) {
+    throw new Error('自建 VPS 配置未能从代理节点中提取 IPv4 server，无法生成 server/32 direct')
   }
 
-  if (!serverDirectRules.length) return
-
-  const managedCidrs = serverDirectRules.map(rule => rule.ip_cidr)
+  const managedCidrs = servers.map(server => `${server}/32`)
 
   config.route.rules = config.route.rules.filter(rule => {
     if (rule?.outbound !== 'direct') return true
 
     const ipCidr = rule?.ip_cidr
-    if (typeof ipCidr === 'string') return !managedCidrs.includes(ipCidr)
-    if (Array.isArray(ipCidr)) return !ipCidr.some(item => managedCidrs.includes(item))
+
+    if (typeof ipCidr === 'string') {
+      return !managedCidrs.includes(ipCidr)
+    }
+
+    if (Array.isArray(ipCidr)) {
+      return !ipCidr.some(item => managedCidrs.includes(item))
+    }
 
     return true
   })
+
+  const serverDirectRules = managedCidrs.map(cidr => ({
+    ip_cidr: cidr,
+    outbound: 'direct'
+  }))
 
   config.route.rules.unshift(...serverDirectRules)
 }
@@ -275,7 +313,7 @@ ensureSelfBuiltServerDirectRule(proxies)
 $content = JSON.stringify(config, null, 2)
 
 function log(v) {
-  console.log(`[📦 Windows 1.13.14 stable 自建节点 no-home 脚本] ${v}`)
+  console.log(`[📦 Windows 1.13.14 final 自建节点 no-home 脚本] ${v}`)
 }
 
 log('✅ 完成')
