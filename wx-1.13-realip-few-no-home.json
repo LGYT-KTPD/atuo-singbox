@@ -65,8 +65,7 @@
       {
         "tag": "local-dns",
         "type": "udp",
-        "server": "223.5.5.5",
-        "strategy": "prefer_ipv4"
+        "server": "223.5.5.5"
       },
       {
         "tag": "proxy-dns",
@@ -74,8 +73,7 @@
         "server": "dns.google",
         "server_port": 853,
         "domain_resolver": "hosts-fix",
-        "detour": "Proxy",
-        "strategy": "prefer_ipv4"
+        "detour": "Proxy"
       }
     ],
     "rules": [
