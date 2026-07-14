@@ -8,57 +8,82 @@
       "external_ui": "ui",
       "secret": "",
       "external_ui_download_url": "https://gh-proxy.com/https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip",
-      "external_ui_download_detour": "direct",
-      "default_mode": "rule"
+      "default_mode": "rule",
+      "external_ui_http_client": "direct-download"
     },
     "cache_file": {
-      "enabled": true
+      "enabled": true,
+      "store_dns": true
     }
   },
   "dns": {
     "servers": [
       {
-        "tag": "google",
-        "type": "tls",
-        "server": "8.8.8.8",
-        "detour": "Proxy"
+        "type": "hosts",
+        "tag": "hosts-fix",
+        "predefined": {
+          "dns.google": [
+            "8.8.8.8",
+            "8.8.4.4"
+          ],
+          "dns.alidns.com": [
+            "223.5.5.5",
+            "223.6.6.6"
+          ],
+          "cloudflare-dns.com": [
+            "104.16.248.249",
+            "104.16.249.249"
+          ],
+          "dns.cloudflare.com": [
+            "104.16.248.249",
+            "104.16.249.249"
+          ],
+          "raw.githubusercontent.com": [
+            "185.199.108.133",
+            "185.199.109.133",
+            "185.199.110.133",
+            "185.199.111.133"
+          ],
+          "cdn.jsdelivr.net": [
+            "104.16.89.20",
+            "104.16.90.20"
+          ]
+        }
       },
       {
+        "type": "local",
         "tag": "local",
+        "neighbor_domain": [
+          ".local",
+          ".lan"
+        ]
+      },
+      {
+        "type": "mdns",
+        "tag": "mdns-server"
+      },
+      {
+        "tag": "local-dns",
         "type": "udp",
         "server": "223.5.5.5"
       },
       {
-        "tag": "public",
-        "type": "https",
-        "server": "dns.alidns.com",
-        "domain_resolver": "local"
+        "tag": "proxy-dns",
+        "type": "tls",
+        "server": "dns.google",
+        "server_port": 853,
+        "domain_resolver": "hosts-fix",
+        "detour": "Proxy"
       }
     ],
     "rules": [
       {
-        "clash_mode": "direct",
-        "action": "route",
-        "server": "local"
-      },
-      {
-        "clash_mode": "global",
-        "action": "route",
-        "server": "google"
-      },
-      {
-        "domain_suffix": [
-          "ghfast.top",
-          "raw.githubusercontent.com",
-          "github.com",
-          "gh-proxy.com",
-          "testingcf.jsdelivr.net",
-          "cdn.jsdelivr.net",
-          "ghproxy.net"
+        "query_type": [
+          "SVCB",
+          "HTTPS",
+          "PTR"
         ],
-        "action": "route",
-        "server": "local",
-        "strategy": "ipv4_only"
+        "action": "reject"
       },
       {
         "process_name": [
@@ -66,8 +91,7 @@
           "WeChatAppEx.exe"
         ],
         "action": "route",
-        "server": "local",
-        "strategy": "ipv4_only"
+        "server": "local-dns"
       },
       {
         "domain_suffix": [
@@ -84,23 +108,78 @@
           "mmbiz.qlogo.cn"
         ],
         "action": "route",
-        "server": "local",
-        "strategy": "ipv4_only"
+        "server": "local-dns"
+      },
+      {
+        "domain_suffix": [
+          "ghfast.top",
+          "raw.githubusercontent.com",
+          "github.com",
+          "gh-proxy.com",
+          "ghproxy.net",
+          "testingcf.jsdelivr.net",
+          "cdn.jsdelivr.net"
+        ],
+        "action": "route",
+        "server": "local-dns"
+      },
+      {
+        "clash_mode": "direct",
+        "action": "route",
+        "server": "local-dns"
+      },
+      {
+        "clash_mode": "global",
+        "action": "route",
+        "server": "proxy-dns"
       },
       {
         "rule_set": "geosite-cn",
         "action": "route",
-        "server": "local"
+        "server": "local-dns"
       },
       {
         "rule_set": "geosite-geolocation-!cn",
         "action": "route",
+        "server": "proxy-dns"
+      },
+      {
+        "clash_mode": "direct",
+        "action": "route",
+        "server": "local"
+      },
+      {
+        "clash_mode": "global",
+        "action": "route",
         "server": "google"
+      },
+      {
+        "domain_suffix": [
+          "weixin.qq.com",
+          "wx.qq.com",
+          "wechat.com",
+          "qpic.cn",
+          "qlogo.cn",
+          "gtimg.com",
+          "tenpay.com",
+          "url.cn",
+          "weiyun.com",
+          "mmbiz.qpic.cn",
+          "mmbiz.qlogo.cn"
+        ],
+        "action": "route",
+        "server": "local"
       }
     ],
-    "reverse_mapping": false,
-    "strategy": "ipv4_only",
-    "final": "google"
+    "reverse_mapping": true,
+    "strategy": "prefer_ipv4",
+    "final": "proxy-dns",
+    "timeout": "3s",
+    "cache_capacity": 65536,
+    "optimistic": {
+      "enabled": true,
+      "timeout": "5m"
+    }
   },
   "inbounds": [
     {
@@ -112,7 +191,11 @@
       ],
       "stack": "system",
       "auto_route": true,
-      "strict_route": true
+      "strict_route": true,
+      "dns_mode": "hijack",
+      "dns_address": "172.19.0.2",
+      "endpoint_independent_nat": true,
+      "udp_timeout": "5m0s"
     },
     {
       "tag": "mixed-in",
@@ -393,12 +476,22 @@
     }
   ],
   "route": {
-    "default_domain_resolver": "local",
+    "default_domain_resolver": "local-dns",
     "auto_detect_interface": true,
     "final": "Proxy",
     "rules": [
       {
-        "ip_version": 6,
+        "type": "logical",
+        "mode": "and",
+        "rules": [
+          {
+            "ip_version": 6
+          },
+          {
+            "default_interface_address": "2000::/3",
+            "invert": true
+          }
+        ],
         "action": "reject"
       },
       {
@@ -579,6 +672,51 @@
           "geosite-cn"
         ],
         "outbound": "China"
+      },
+      {
+        "protocol": [
+          "stun",
+          "dtls"
+        ],
+        "action": "reject"
+      },
+      {
+        "type": "logical",
+        "mode": "or",
+        "rules": [
+          {
+            "network": "udp",
+            "port": [
+              3478,
+              5349,
+              5350,
+              19302,
+              10000
+            ]
+          },
+          {
+            "domain_regex": "^stun\\..+"
+          },
+          {
+            "domain_keyword": [
+              "stun",
+              "turn",
+              "httpdns"
+            ]
+          },
+          {
+            "protocol": "stun"
+          }
+        ],
+        "action": "reject"
+      },
+      {
+        "action": "route-options",
+        "udp_disable_domain_unmapping": true,
+        "udp_connect": true
+      },
+      {
+        "action": "resolve"
       }
     ],
     "rule_set": [
@@ -587,211 +725,223 @@
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ads-all.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-openai",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/Toperlock/sing-box-geosite/main/rule/OpenAI.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-youtube",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/youtube.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geoip-google",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/google.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-google",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/google.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-github",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/github.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geoip-telegram",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/telegram.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-telegram",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/telegram.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geoip-twitter",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/twitter.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-twitter",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/twitter.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geoip-facebook",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/facebook.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-facebook",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/facebook.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-bilibili",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/bilibili.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-bahamut",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/bahamut.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-spotify",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/spotify.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-tiktok",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/tiktok.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geoip-netflix",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/netflix.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-netflix",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/netflix.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-disney",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/disney.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geoip-apple",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo-lite/geoip/apple.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-apple",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/apple.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-amazon",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/amazon.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-microsoft",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/microsoft.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-category-games",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-games.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-dmm",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/dmm.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-hbo",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/hbo.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-primevideo",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/primevideo.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-geolocation-!cn",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-!cn.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geoip-cn",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/cn.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-cn",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       }
-    ]
-  }
+    ],
+    "default_http_client": "direct-download"
+  },
+  "http_clients": [
+    {
+      "tag": "direct-download",
+      "version": 2
+    },
+    {
+      "tag": "proxy-download",
+      "version": 2,
+      "detour": "Proxy"
+    }
+  ]
 }
