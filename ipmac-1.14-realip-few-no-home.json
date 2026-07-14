@@ -8,8 +8,8 @@
       "external_ui": "ui",
       "secret": "",
       "external_ui_download_url": "https://gh-proxy.com/https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip",
-      "external_ui_download_detour": "direct",
-      "default_mode": "rule"
+      "default_mode": "rule",
+      "external_ui_http_client": "direct"
     },
     "cache_file": {
       "enabled": true,
@@ -33,6 +33,20 @@
           "cloudflare-dns.com": [
             "104.16.248.249",
             "104.16.249.249"
+          ],
+          "dns.cloudflare.com": [
+            "104.16.248.249",
+            "104.16.249.249"
+          ],
+          "raw.githubusercontent.com": [
+            "185.199.108.133",
+            "185.199.109.133",
+            "185.199.110.133",
+            "185.199.111.133"
+          ],
+          "cdn.jsdelivr.net": [
+            "104.16.89.20",
+            "104.16.90.20"
           ]
         }
       },
@@ -167,7 +181,7 @@
     "cache_capacity": 65536,
     "optimistic": {
       "enabled": true,
-      "timeout": "1h0m0s"
+      "timeout": "5m"
     }
   },
   "inbounds": [
@@ -184,7 +198,8 @@
       "strict_route": true,
       "dns_mode": "hijack",
       "dns_address": "172.19.0.2",
-      "endpoint_independent_nat": true
+      "endpoint_independent_nat": true,
+      "udp_timeout": "5m0s"
     },
     {
       "tag": "mixed-in",
@@ -214,7 +229,17 @@
     "final": "Proxy",
     "rules": [
       {
-        "ip_version": 6,
+        "type": "logical",
+        "mode": "and",
+        "rules": [
+          {
+            "ip_version": 6
+          },
+          {
+            "default_interface_address": "2000::/3",
+            "invert": true
+          }
+        ],
         "action": "reject"
       },
       {
@@ -343,6 +368,9 @@
               "turn",
               "httpdns"
             ]
+          },
+          {
+            "protocol": "stun"
           }
         ],
         "action": "reject"
@@ -364,25 +392,29 @@
         "tag": "geosite-category-ads-all",
         "type": "remote",
         "format": "binary",
-        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ads-all.srs"
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ads-all.srs",
+        "http_client": "direct"
       },
       {
         "tag": "geosite-geolocation-!cn",
         "type": "remote",
         "format": "binary",
-        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-!cn.srs"
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-!cn.srs",
+        "http_client": "direct"
       },
       {
         "tag": "geoip-cn",
         "type": "remote",
         "format": "binary",
-        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/cn.srs"
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/cn.srs",
+        "http_client": "direct"
       },
       {
         "tag": "geosite-cn",
         "type": "remote",
         "format": "binary",
-        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs"
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs",
+        "http_client": "direct"
       }
     ]
   },
