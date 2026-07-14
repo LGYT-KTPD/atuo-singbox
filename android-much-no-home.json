@@ -12,6 +12,28 @@
           "dns.google": [
             "8.8.8.8",
             "8.8.4.4"
+          ],
+          "dns.alidns.com": [
+            "223.5.5.5",
+            "223.6.6.6"
+          ],
+          "cloudflare-dns.com": [
+            "104.16.248.249",
+            "104.16.249.249"
+          ],
+          "dns.cloudflare.com": [
+            "104.16.248.249",
+            "104.16.249.249"
+          ],
+          "raw.githubusercontent.com": [
+            "185.199.108.133",
+            "185.199.109.133",
+            "185.199.110.133",
+            "185.199.111.133"
+          ],
+          "cdn.jsdelivr.net": [
+            "104.16.89.20",
+            "104.16.90.20"
           ]
         }
       },
@@ -470,37 +492,6 @@
         "outbound": "Global"
       },
       {
-        "protocol": [
-          "stun",
-          "dtls"
-        ],
-        "action": "reject"
-      },
-      {
-        "type": "logical",
-        "mode": "or",
-        "rules": [
-          {
-            "network": "udp",
-            "port": [
-              3478,
-              5349,
-              19302
-            ]
-          },
-          {
-            "domain_keyword": [
-              "stun",
-              "turn"
-            ]
-          }
-        ],
-        "action": "reject"
-      },
-      {
-        "action": "resolve"
-      },
-      {
         "rule_set": [
           "private",
           "cn",
@@ -531,6 +522,46 @@
           "tv.twitch.android.app"
         ],
         "outbound": "Global"
+      },
+      {
+        "protocol": [
+          "stun",
+          "dtls"
+        ],
+        "action": "reject"
+      },
+      {
+        "type": "logical",
+        "mode": "or",
+        "rules": [
+          {
+            "network": "udp",
+            "port": [
+              3478,
+              5349,
+              5350,
+              19302,
+              10000
+            ]
+          },
+          {
+            "domain_regex": "^stun\\..+"
+          },
+          {
+            "domain_keyword": [
+              "stun",
+              "turn",
+              "httpdns"
+            ]
+          },
+          {
+            "protocol": "stun"
+          }
+        ],
+        "action": "reject"
+      },
+      {
+        "action": "resolve"
       }
     ],
     "rule_set": [
