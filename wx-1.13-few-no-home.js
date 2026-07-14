@@ -1,5 +1,5 @@
 // Windows SFW sing-box 1.14.0-alpha.44：自建节点少节点 no-home
-// 1.14 使用 http_clients / route.default_http_client，消除弃用警告
+// alpha44：使用 http_clients / default_http_client，并吸收 PK alpha40-42 稳定优化
 
 log('🚀 开始')
 
@@ -18,29 +18,40 @@ function removeDnsRuleStrategy(rule) {
   return rule
 }
 
-function applyAlpha44Compatibility() {
+function applyAlpha44PkOptimizations() {
+  if (!config.experimental) config.experimental = {}
+  if (!config.experimental.cache_file) config.experimental.cache_file = {}
+  if (!config.experimental.clash_api) config.experimental.clash_api = {}
   if (!config.dns) config.dns = {}
-  if (!Array.isArray(config.dns.rules)) config.dns.rules = []
-  if (!Array.isArray(config.dns.servers)) config.dns.servers = []
   if (!config.route) config.route = {}
+  if (!Array.isArray(config.dns.rules)) config.dns.rules = []
   if (!Array.isArray(config.route.rule_set)) config.route.rule_set = []
-
-  config.dns.strategy = 'ipv4_only'
-  config.dns.rules = config.dns.rules.map(removeDnsRuleStrategy)
-  config.dns.servers = config.dns.servers.map(s => {
-    if (['google', 'local', 'public', 'home-dns'].includes(s?.tag)) {
-      return { ...s, strategy: 'ipv4_only' }
-    }
-    return s
-  })
-
   if (!Array.isArray(config.http_clients)) config.http_clients = []
-  config.http_clients = config.http_clients.filter(c => c?.tag !== 'direct-download')
-  config.http_clients.unshift({
-    tag: 'direct-download',
-    version: 2,
-    detour: 'direct'
-  })
+
+  delete config.experimental.clash_api.external_ui_download_detour
+  config.experimental.clash_api.external_ui_http_client = 'direct-download'
+
+  config.experimental.cache_file.enabled = true
+  config.experimental.cache_file.store_dns = true
+  delete config.experimental.cache_file.store_fakeip
+
+  config.dns.reverse_mapping = true
+  config.dns.strategy = 'prefer_ipv4'
+  config.dns.timeout = '3s'
+  config.dns.cache_capacity = 65536
+  config.dns.optimistic = { enabled: true, timeout: '5m' }
+  config.dns.final = 'proxy-dns'
+  config.dns.rules = config.dns.rules.map(removeDnsRuleStrategy)
+
+  config.http_clients = config.http_clients.filter(c =>
+    !['direct-download', 'proxy-download'].includes(c?.tag)
+  )
+  config.http_clients.unshift(
+    { tag: 'direct-download', version: 2, detour: 'direct' },
+    { tag: 'proxy-download', version: 2, detour: 'Proxy' }
+  )
+
+  config.route.default_domain_resolver = 'local-dns'
   config.route.default_http_client = 'direct-download'
 
   config.route.rule_set = config.route.rule_set.map(rs => {
@@ -51,17 +62,16 @@ function applyAlpha44Compatibility() {
     return rs
   })
 
-  if (config.experimental?.clash_api) {
-    delete config.experimental.clash_api.external_ui_download_detour
-    config.experimental.clash_api.external_ui_http_client = 'direct-download'
-  }
-
   if (Array.isArray(config.inbounds)) {
     config.inbounds = config.inbounds.map(i => {
       if (i?.type !== 'tun') return i
       return {
         ...i,
+        stack: 'system',
+        auto_route: true,
+        strict_route: true,
         dns_mode: 'hijack',
+        dns_address: '172.19.0.2',
         endpoint_independent_nat: true,
         udp_timeout: i.udp_timeout || '5m0s'
       }
@@ -151,17 +161,17 @@ try {
   throw new Error(`配置解析失败: ${e.message}`)
 }
 
-applyAlpha44Compatibility()
+applyAlpha44PkOptimizations()
 
 if (config.experimental?.clash_api?.external_ui_http_client) {
   delete config.experimental.clash_api.external_ui_http_client
 }
 
-// 1.14 保留并重建 http_clients
+// alpha44：保留 http_clients
 
 if (!config.route) config.route = {}
 config.route.default_domain_resolver = 'local'
-// 1.14 由 applyAlpha44Compatibility 设置 default_http_client
+// alpha44：保留 default_http_client
 
 if (!config.dns) config.dns = {}
 if (!Array.isArray(config.dns.rules)) config.dns.rules = []
@@ -225,8 +235,8 @@ if (!downloadDnsRule) {
   downloadDnsRule = {
     domain_suffix: [],
     action: 'route',
-    server: 'local',
-      }
+    server: 'local'
+  }
 
   config.dns.rules.splice(
     Math.min(2, config.dns.rules.length),
@@ -259,8 +269,10 @@ if (Array.isArray(config.route.rule_set)) {
         )
     }
 
+    delete rs.download_detour
+      rs.http_client = 'direct-download'
+
     if (rs?.type === 'remote') {
-      delete rs.download_detour
       rs.http_client = 'direct-download'
     }
 
@@ -368,10 +380,18 @@ if (!localDns) {
 
 ensureSelfBuiltServerDirectRule(proxies)
 
+
+if (config.route?.rule_set?.some(rs => rs?.download_detour !== undefined)) {
+  throw new Error('alpha44 最终配置不应包含 download_detour')
+}
+if (config.dns?.rules?.some(r => JSON.stringify(r).includes('"strategy"'))) {
+  throw new Error('DNS rule action 中不应包含已弃用 strategy')
+}
+
 $content = JSON.stringify(config, null, 2)
 
 function log(v) {
-  console.log(`[📦 Windows SFW 1.14-alpha44 自建节点 no-home 脚本] ${v}`)
+  console.log(`[📦 Windows SFW 1.14-alpha44 final 自建节点 no-home 脚本] ${v}`)
 }
 
 log('✅ 完成')
