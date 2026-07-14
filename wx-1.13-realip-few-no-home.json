@@ -12,33 +12,139 @@
       "external_ui_http_client": "direct-download"
     },
     "cache_file": {
-      "enabled": true
+      "enabled": true,
+      "store_dns": true
     }
   },
   "dns": {
     "servers": [
       {
-        "tag": "google",
-        "type": "tls",
-        "server": "8.8.8.8",
-        "detour": "Proxy",
-        "strategy": "ipv4_only"
+        "type": "hosts",
+        "tag": "hosts-fix",
+        "predefined": {
+          "dns.google": [
+            "8.8.8.8",
+            "8.8.4.4"
+          ],
+          "dns.alidns.com": [
+            "223.5.5.5",
+            "223.6.6.6"
+          ],
+          "cloudflare-dns.com": [
+            "104.16.248.249",
+            "104.16.249.249"
+          ],
+          "dns.cloudflare.com": [
+            "104.16.248.249",
+            "104.16.249.249"
+          ],
+          "raw.githubusercontent.com": [
+            "185.199.108.133",
+            "185.199.109.133",
+            "185.199.110.133",
+            "185.199.111.133"
+          ],
+          "cdn.jsdelivr.net": [
+            "104.16.89.20",
+            "104.16.90.20"
+          ]
+        }
       },
       {
+        "type": "local",
         "tag": "local",
+        "neighbor_domain": [
+          ".local",
+          ".lan"
+        ]
+      },
+      {
+        "type": "mdns",
+        "tag": "mdns-server"
+      },
+      {
+        "tag": "local-dns",
         "type": "udp",
         "server": "223.5.5.5",
-        "strategy": "ipv4_only"
+        "strategy": "prefer_ipv4"
       },
       {
-        "tag": "public",
-        "type": "https",
-        "server": "dns.alidns.com",
-        "domain_resolver": "local",
-        "strategy": "ipv4_only"
+        "tag": "proxy-dns",
+        "type": "tls",
+        "server": "dns.google",
+        "server_port": 853,
+        "domain_resolver": "hosts-fix",
+        "detour": "Proxy",
+        "strategy": "prefer_ipv4"
       }
     ],
     "rules": [
+      {
+        "query_type": [
+          "SVCB",
+          "HTTPS",
+          "PTR"
+        ],
+        "action": "reject"
+      },
+      {
+        "process_name": [
+          "Weixin.exe",
+          "WeChatAppEx.exe"
+        ],
+        "action": "route",
+        "server": "local-dns"
+      },
+      {
+        "domain_suffix": [
+          "weixin.qq.com",
+          "wx.qq.com",
+          "wechat.com",
+          "qpic.cn",
+          "qlogo.cn",
+          "gtimg.com",
+          "tenpay.com",
+          "url.cn",
+          "weiyun.com",
+          "mmbiz.qpic.cn",
+          "mmbiz.qlogo.cn"
+        ],
+        "action": "route",
+        "server": "local-dns"
+      },
+      {
+        "domain_suffix": [
+          "ghfast.top",
+          "raw.githubusercontent.com",
+          "github.com",
+          "gh-proxy.com",
+          "ghproxy.net",
+          "testingcf.jsdelivr.net",
+          "cdn.jsdelivr.net"
+        ],
+        "action": "route",
+        "server": "local-dns"
+      },
+      {
+        "clash_mode": "direct",
+        "action": "route",
+        "server": "local-dns"
+      },
+      {
+        "clash_mode": "global",
+        "action": "route",
+        "server": "proxy-dns"
+      },
+      {
+        "rule_set": "geosite-cn",
+        "action": "route",
+        "server": "local-dns"
+      },
+      {
+        "rule_set": "geosite-geolocation-!cn",
+        "action": "route",
+        "server": "proxy-dns"
+      },
       {
         "clash_mode": "direct",
         "action": "route",
@@ -48,27 +154,6 @@
         "clash_mode": "global",
         "action": "route",
         "server": "google"
-      },
-      {
-        "domain_suffix": [
-          "ghfast.top",
-          "raw.githubusercontent.com",
-          "github.com",
-          "gh-proxy.com",
-          "testingcf.jsdelivr.net",
-          "cdn.jsdelivr.net",
-          "ghproxy.net"
-        ],
-        "action": "route",
-        "server": "local"
-      },
-      {
-        "process_name": [
-          "Weixin.exe",
-          "WeChatAppEx.exe"
-        ],
-        "action": "route",
-        "server": "local"
       },
       {
         "domain_suffix": [
@@ -84,21 +169,17 @@
         ],
         "action": "route",
         "server": "local"
-      },
-      {
-        "rule_set": "geosite-cn",
-        "action": "route",
-        "server": "local"
-      },
-      {
-        "rule_set": "geosite-geolocation-!cn",
-        "action": "route",
-        "server": "google"
       }
     ],
-    "reverse_mapping": false,
-    "strategy": "ipv4_only",
-    "final": "google"
+    "reverse_mapping": true,
+    "strategy": "prefer_ipv4",
+    "final": "proxy-dns",
+    "timeout": "3s",
+    "cache_capacity": 65536,
+    "optimistic": {
+      "enabled": true,
+      "timeout": "5m"
+    }
   },
   "inbounds": [
     {
@@ -112,6 +193,7 @@
       "auto_route": true,
       "strict_route": true,
       "dns_mode": "hijack",
+      "dns_address": "172.19.0.2",
       "endpoint_independent_nat": true,
       "udp_timeout": "5m0s"
     },
@@ -138,12 +220,22 @@
     }
   ],
   "route": {
-    "default_domain_resolver": "local",
+    "default_domain_resolver": "local-dns",
     "auto_detect_interface": true,
     "final": "Proxy",
     "rules": [
       {
-        "ip_version": 6,
+        "type": "logical",
+        "mode": "and",
+        "rules": [
+          {
+            "ip_version": 6
+          },
+          {
+            "default_interface_address": "2000::/3",
+            "invert": true
+          }
+        ],
         "action": "reject"
       },
       {
@@ -175,7 +267,9 @@
           "gtimg.com",
           "tenpay.com",
           "url.cn",
-          "weiyun.com"
+          "weiyun.com",
+          "mmbiz.qpic.cn",
+          "mmbiz.qlogo.cn"
         ],
         "outbound": "direct"
       },
@@ -237,6 +331,43 @@
         "outbound": "direct"
       },
       {
+        "protocol": [
+          "stun",
+          "dtls"
+        ],
+        "action": "reject"
+      },
+      {
+        "type": "logical",
+        "mode": "or",
+        "rules": [
+          {
+            "network": "udp",
+            "port": [
+              3478,
+              5349,
+              5350,
+              19302,
+              10000
+            ]
+          },
+          {
+            "domain_regex": "^stun\\..+"
+          },
+          {
+            "domain_keyword": [
+              "stun",
+              "turn",
+              "httpdns"
+            ]
+          },
+          {
+            "protocol": "stun"
+          }
+        ],
+        "action": "reject"
+      },
+      {
         "action": "route-options",
         "udp_disable_domain_unmapping": true,
         "udp_connect": true
@@ -282,6 +413,11 @@
       "tag": "direct-download",
       "version": 2,
       "detour": "direct"
+    },
+    {
+      "tag": "proxy-download",
+      "version": 2,
+      "detour": "Proxy"
     }
   ]
 }
