@@ -1,7 +1,5 @@
-// Windows sing-box 1.13.14 稳定版：机场多分组 no-home
-// 不使用 http_clients / route.default_http_client
-// 不使用 selector.default / urltest.default
-// 规则下载使用 download_detour: direct
+// Windows SFW sing-box 1.14.0-alpha.44：机场多分组 no-home
+// alpha44：使用 http_clients / default_http_client，并吸收 PK alpha40-42 稳定优化
 // 默认节点由 outbounds 数组第一个真实代理节点决定
 
 log('🚀 开始')
@@ -16,6 +14,77 @@ try {
   config = parser.parse($content ?? $files[0])
 } catch (e) {
   throw new Error(`配置解析失败: ${e.message}`)
+}
+
+applyAlpha44PkOptimizations()
+
+
+function removeDnsRuleStrategy(rule) {
+  if (!rule || typeof rule !== 'object') return rule
+  delete rule.strategy
+  if (Array.isArray(rule.rules)) rule.rules = rule.rules.map(removeDnsRuleStrategy)
+  return rule
+}
+
+function applyAlpha44PkOptimizations() {
+  if (!config.experimental) config.experimental = {}
+  if (!config.experimental.cache_file) config.experimental.cache_file = {}
+  if (!config.experimental.clash_api) config.experimental.clash_api = {}
+  if (!config.dns) config.dns = {}
+  if (!config.route) config.route = {}
+  if (!Array.isArray(config.dns.rules)) config.dns.rules = []
+  if (!Array.isArray(config.route.rule_set)) config.route.rule_set = []
+  if (!Array.isArray(config.http_clients)) config.http_clients = []
+
+  delete config.experimental.clash_api.external_ui_download_detour
+  config.experimental.clash_api.external_ui_http_client = 'direct-download'
+
+  config.experimental.cache_file.enabled = true
+  config.experimental.cache_file.store_dns = true
+  delete config.experimental.cache_file.store_fakeip
+
+  config.dns.reverse_mapping = true
+  config.dns.strategy = 'prefer_ipv4'
+  config.dns.timeout = '3s'
+  config.dns.cache_capacity = 65536
+  config.dns.optimistic = { enabled: true, timeout: '5m' }
+  config.dns.final = 'proxy-dns'
+  config.dns.rules = config.dns.rules.map(removeDnsRuleStrategy)
+
+  config.http_clients = config.http_clients.filter(c =>
+    !['direct-download', 'proxy-download'].includes(c?.tag)
+  )
+  config.http_clients.unshift(
+    { tag: 'direct-download', version: 2 },
+    { tag: 'proxy-download', version: 2, detour: 'Proxy' }
+  )
+
+  config.route.default_domain_resolver = 'local-dns'
+  config.route.default_http_client = 'direct-download'
+
+  config.route.rule_set = config.route.rule_set.map(rs => {
+    if (rs?.type === 'remote') {
+      delete rs.download_detour
+      rs.http_client = 'direct-download'
+    }
+    return rs
+  })
+
+  if (Array.isArray(config.inbounds)) {
+    config.inbounds = config.inbounds.map(i => {
+      if (i?.type !== 'tun') return i
+      return {
+        ...i,
+        stack: 'system',
+        auto_route: true,
+        strict_route: true,
+        dns_mode: 'hijack',
+        dns_address: '172.19.0.2',
+        endpoint_independent_nat: true,
+        udp_timeout: i.udp_timeout || '5m0s'
+      }
+    })
+  }
 }
 
 function getTags(proxies, regex) {
@@ -89,12 +158,12 @@ if (config.experimental?.clash_api?.external_ui_http_client) {
   delete config.experimental.clash_api.external_ui_http_client
 }
 
-// Windows 1.13.14 不支持这些
-delete config.http_clients
+// Windows SFW 1.14-alpha44 不支持这些
+// alpha44：保留 http_clients
 
 if (!config.route) config.route = {}
 config.route.default_domain_resolver = 'local'
-delete config.route.default_http_client
+// alpha44：保留 default_http_client
 
 if (!config.dns) config.dns = {}
 if (!Array.isArray(config.dns.rules)) config.dns.rules = []
@@ -171,8 +240,7 @@ if (!downloadDnsRule) {
   downloadDnsRule = {
     domain_suffix: [],
     action: 'route',
-    server: 'local',
-    strategy: 'ipv4_only'
+    server: 'local'
   }
 
   config.dns.rules.splice(
@@ -207,10 +275,11 @@ if (Array.isArray(config.route.rule_set)) {
         )
     }
 
-    delete rs.http_client
+    delete rs.download_detour
+      rs.http_client = 'direct-download'
 
     if (rs?.type === 'remote') {
-      rs.download_detour = 'direct'
+      rs.http_client = 'direct-download'
     }
 
     return rs
@@ -349,7 +418,7 @@ if (!proxyGroup) {
   throw new Error('最终配置中 Proxy 组不存在或格式错误')
 }
 
-// Windows 1.13.14 默认由 outbounds 第一个节点决定
+// Windows SFW 1.14-alpha44 默认由 outbounds 第一个节点决定
 proxyGroup.outbounds = uniq([
   ...proxyTags,
   'direct'
@@ -414,10 +483,27 @@ if (!localDns) {
 
 removePublicDirect32Rules()
 
+
+const directDownloadClient = config.http_clients?.find(c => c?.tag === 'direct-download')
+if (directDownloadClient?.detour !== undefined) {
+  throw new Error('direct-download HTTP client 不应设置 detour；留空即直接连接')
+}
+
+if (config.route?.rule_set?.some(rs => rs?.download_detour !== undefined)) {
+  throw new Error('alpha44 最终配置不应包含 download_detour')
+}
+if (config.dns?.servers?.some(s => s?.strategy !== undefined)) {
+  throw new Error('Windows SFW 配置中 dns.servers 不支持 strategy 字段')
+}
+
+if (config.dns?.rules?.some(r => JSON.stringify(r).includes('"strategy"'))) {
+  throw new Error('DNS rule action 中不应包含已弃用 strategy')
+}
+
 $content = JSON.stringify(config, null, 2)
 
 function log(v) {
-  console.log(`[📦 Windows 1.13.14 no-home 多分组脚本] ${v}`)
+  console.log(`[📦 Windows SFW 1.14-alpha44 no-home 多分组脚本] ${v}`)
 }
 
 log('✅ 完成')
