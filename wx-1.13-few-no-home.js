@@ -384,6 +384,10 @@ ensureSelfBuiltServerDirectRule(proxies)
 if (config.route?.rule_set?.some(rs => rs?.download_detour !== undefined)) {
   throw new Error('alpha44 最终配置不应包含 download_detour')
 }
+if (config.dns?.servers?.some(s => s?.strategy !== undefined)) {
+  throw new Error('Windows SFW 配置中 dns.servers 不支持 strategy 字段')
+}
+
 if (config.dns?.rules?.some(r => JSON.stringify(r).includes('"strategy"'))) {
   throw new Error('DNS rule action 中不应包含已弃用 strategy')
 }
