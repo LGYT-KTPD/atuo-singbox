@@ -8,8 +8,8 @@
       "external_ui": "ui",
       "secret": "",
       "external_ui_download_url": "https://gh-proxy.com/https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip",
-      "external_ui_download_detour": "direct",
-      "default_mode": "rule"
+      "default_mode": "rule",
+      "external_ui_http_client": "direct-download"
     },
     "cache_file": {
       "enabled": true
@@ -21,18 +21,21 @@
         "tag": "google",
         "type": "tls",
         "server": "8.8.8.8",
-        "detour": "Proxy"
+        "detour": "Proxy",
+        "strategy": "ipv4_only"
       },
       {
         "tag": "local",
         "type": "udp",
-        "server": "223.5.5.5"
+        "server": "223.5.5.5",
+        "strategy": "ipv4_only"
       },
       {
         "tag": "public",
         "type": "https",
         "server": "dns.alidns.com",
-        "domain_resolver": "local"
+        "domain_resolver": "local",
+        "strategy": "ipv4_only"
       }
     ],
     "rules": [
@@ -57,8 +60,7 @@
           "ghproxy.net"
         ],
         "action": "route",
-        "server": "local",
-        "strategy": "ipv4_only"
+        "server": "local"
       },
       {
         "process_name": [
@@ -66,8 +68,7 @@
           "WeChatAppEx.exe"
         ],
         "action": "route",
-        "server": "local",
-        "strategy": "ipv4_only"
+        "server": "local"
       },
       {
         "domain_suffix": [
@@ -82,8 +83,7 @@
           "weiyun.com"
         ],
         "action": "route",
-        "server": "local",
-        "strategy": "ipv4_only"
+        "server": "local"
       },
       {
         "rule_set": "geosite-cn",
@@ -110,7 +110,10 @@
       ],
       "stack": "system",
       "auto_route": true,
-      "strict_route": true
+      "strict_route": true,
+      "dns_mode": "hijack",
+      "endpoint_independent_nat": true,
+      "udp_timeout": "5m0s"
     },
     {
       "tag": "mixed-in",
@@ -232,6 +235,14 @@
           "geosite-cn"
         ],
         "outbound": "direct"
+      },
+      {
+        "action": "route-options",
+        "udp_disable_domain_unmapping": true,
+        "udp_connect": true
+      },
+      {
+        "action": "resolve"
       }
     ],
     "rule_set": [
@@ -240,29 +251,37 @@
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ads-all.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-geolocation-!cn",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-!cn.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geoip-cn",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/cn.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       },
       {
         "tag": "geosite-cn",
         "type": "remote",
         "format": "binary",
         "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs",
-        "download_detour": "direct"
+        "http_client": "direct-download"
       }
-    ]
-  }
+    ],
+    "default_http_client": "direct-download"
+  },
+  "http_clients": [
+    {
+      "tag": "direct-download",
+      "version": 2,
+      "detour": "direct"
+    }
+  ]
 }
