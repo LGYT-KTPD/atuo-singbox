@@ -1,6 +1,5 @@
-// Windows sing-box 1.13.14 稳定版：自建节点少节点 no-home
-// 1.13.14 不使用 http_clients / route.default_http_client
-// 规则下载使用 download_detour: direct
+// Windows SFW sing-box 1.14.0-alpha.44：自建节点少节点 no-home
+// 1.14 使用 http_clients / route.default_http_client，消除弃用警告
 
 log('🚀 开始')
 
@@ -10,6 +9,65 @@ type = /^1$|col|组合/i.test(type) ? 'collection' : 'subscription'
 const parser = ProxyUtils.JSON5 || JSON
 let config
 
+
+
+function removeDnsRuleStrategy(rule) {
+  if (!rule || typeof rule !== 'object') return rule
+  delete rule.strategy
+  if (Array.isArray(rule.rules)) rule.rules = rule.rules.map(removeDnsRuleStrategy)
+  return rule
+}
+
+function applyAlpha44Compatibility() {
+  if (!config.dns) config.dns = {}
+  if (!Array.isArray(config.dns.rules)) config.dns.rules = []
+  if (!Array.isArray(config.dns.servers)) config.dns.servers = []
+  if (!config.route) config.route = {}
+  if (!Array.isArray(config.route.rule_set)) config.route.rule_set = []
+
+  config.dns.strategy = 'ipv4_only'
+  config.dns.rules = config.dns.rules.map(removeDnsRuleStrategy)
+  config.dns.servers = config.dns.servers.map(s => {
+    if (['google', 'local', 'public', 'home-dns'].includes(s?.tag)) {
+      return { ...s, strategy: 'ipv4_only' }
+    }
+    return s
+  })
+
+  if (!Array.isArray(config.http_clients)) config.http_clients = []
+  config.http_clients = config.http_clients.filter(c => c?.tag !== 'direct-download')
+  config.http_clients.unshift({
+    tag: 'direct-download',
+    version: 2,
+    detour: 'direct'
+  })
+  config.route.default_http_client = 'direct-download'
+
+  config.route.rule_set = config.route.rule_set.map(rs => {
+    if (rs?.type === 'remote') {
+      delete rs.download_detour
+      rs.http_client = 'direct-download'
+    }
+    return rs
+  })
+
+  if (config.experimental?.clash_api) {
+    delete config.experimental.clash_api.external_ui_download_detour
+    config.experimental.clash_api.external_ui_http_client = 'direct-download'
+  }
+
+  if (Array.isArray(config.inbounds)) {
+    config.inbounds = config.inbounds.map(i => {
+      if (i?.type !== 'tun') return i
+      return {
+        ...i,
+        dns_mode: 'hijack',
+        endpoint_independent_nat: true,
+        udp_timeout: i.udp_timeout || '5m0s'
+      }
+    })
+  }
+}
 
 function isIPv4(value) {
   return typeof value === 'string' &&
@@ -93,15 +151,17 @@ try {
   throw new Error(`配置解析失败: ${e.message}`)
 }
 
+applyAlpha44Compatibility()
+
 if (config.experimental?.clash_api?.external_ui_http_client) {
   delete config.experimental.clash_api.external_ui_http_client
 }
 
-delete config.http_clients
+// 1.14 保留并重建 http_clients
 
 if (!config.route) config.route = {}
 config.route.default_domain_resolver = 'local'
-delete config.route.default_http_client
+// 1.14 由 applyAlpha44Compatibility 设置 default_http_client
 
 if (!config.dns) config.dns = {}
 if (!Array.isArray(config.dns.rules)) config.dns.rules = []
@@ -166,8 +226,7 @@ if (!downloadDnsRule) {
     domain_suffix: [],
     action: 'route',
     server: 'local',
-    strategy: 'ipv4_only'
-  }
+      }
 
   config.dns.rules.splice(
     Math.min(2, config.dns.rules.length),
@@ -200,10 +259,9 @@ if (Array.isArray(config.route.rule_set)) {
         )
     }
 
-    delete rs.http_client
-
     if (rs?.type === 'remote') {
-      rs.download_detour = 'direct'
+      delete rs.download_detour
+      rs.http_client = 'direct-download'
     }
 
     return rs
@@ -313,7 +371,7 @@ ensureSelfBuiltServerDirectRule(proxies)
 $content = JSON.stringify(config, null, 2)
 
 function log(v) {
-  console.log(`[📦 Windows 1.13.14 final 自建节点 no-home 脚本] ${v}`)
+  console.log(`[📦 Windows SFW 1.14-alpha44 自建节点 no-home 脚本] ${v}`)
 }
 
 log('✅ 完成')
