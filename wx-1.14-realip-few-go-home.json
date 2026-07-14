@@ -1,0 +1,468 @@
+{
+  "log": {
+    "level": "error"
+  },
+  "experimental": {
+    "clash_api": {
+      "external_controller": "127.0.0.1:9090",
+      "external_ui": "ui",
+      "secret": "",
+      "external_ui_download_url": "https://gh-proxy.com/https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip",
+      "default_mode": "rule",
+      "external_ui_http_client": "direct-download"
+    },
+    "cache_file": {
+      "enabled": true,
+      "store_dns": true
+    }
+  },
+  "dns": {
+    "servers": [
+      {
+        "type": "hosts",
+        "tag": "hosts-fix",
+        "predefined": {
+          "dns.google": [
+            "8.8.8.8",
+            "8.8.4.4"
+          ],
+          "dns.alidns.com": [
+            "223.5.5.5",
+            "223.6.6.6"
+          ],
+          "cloudflare-dns.com": [
+            "104.16.248.249",
+            "104.16.249.249"
+          ],
+          "dns.cloudflare.com": [
+            "104.16.248.249",
+            "104.16.249.249"
+          ],
+          "raw.githubusercontent.com": [
+            "185.199.108.133",
+            "185.199.109.133",
+            "185.199.110.133",
+            "185.199.111.133"
+          ],
+          "cdn.jsdelivr.net": [
+            "104.16.89.20",
+            "104.16.90.20"
+          ]
+        }
+      },
+      {
+        "type": "local",
+        "tag": "local",
+        "neighbor_domain": [
+          ".local",
+          ".lan"
+        ]
+      },
+      {
+        "type": "mdns",
+        "tag": "mdns-server"
+      },
+      {
+        "tag": "local-dns",
+        "type": "udp",
+        "server": "223.5.5.5"
+      },
+      {
+        "tag": "home-dns",
+        "type": "udp",
+        "server": "192.168.1.1",
+        "detour": "wg-home"
+      },
+      {
+        "tag": "proxy-dns",
+        "type": "tls",
+        "server": "dns.google",
+        "server_port": 853,
+        "domain_resolver": "hosts-fix",
+        "detour": "Proxy"
+      }
+    ],
+    "rules": [
+      {
+        "query_type": [
+          "SVCB",
+          "HTTPS",
+          "PTR"
+        ],
+        "action": "reject"
+      },
+      {
+        "domain_suffix": [
+          "__WG_HOME_DOMAIN_PLACEHOLDER__"
+        ],
+        "action": "route",
+        "server": "home-dns"
+      },
+      {
+        "process_name": [
+          "Weixin.exe",
+          "WeChatAppEx.exe"
+        ],
+        "action": "route",
+        "server": "local-dns"
+      },
+      {
+        "domain_suffix": [
+          "weixin.qq.com",
+          "wx.qq.com",
+          "wechat.com",
+          "qpic.cn",
+          "qlogo.cn",
+          "gtimg.com",
+          "tenpay.com",
+          "url.cn",
+          "weiyun.com",
+          "mmbiz.qpic.cn",
+          "mmbiz.qlogo.cn"
+        ],
+        "action": "route",
+        "server": "local-dns"
+      },
+      {
+        "domain_suffix": [
+          "ghfast.top",
+          "raw.githubusercontent.com",
+          "github.com",
+          "gh-proxy.com",
+          "ghproxy.net",
+          "testingcf.jsdelivr.net",
+          "cdn.jsdelivr.net"
+        ],
+        "action": "route",
+        "server": "local-dns"
+      },
+      {
+        "clash_mode": "direct",
+        "action": "route",
+        "server": "local-dns"
+      },
+      {
+        "clash_mode": "global",
+        "action": "route",
+        "server": "proxy-dns"
+      },
+      {
+        "rule_set": "geosite-cn",
+        "action": "route",
+        "server": "local-dns"
+      },
+      {
+        "rule_set": "geosite-geolocation-!cn",
+        "action": "route",
+        "server": "proxy-dns"
+      },
+      {
+        "clash_mode": "direct",
+        "action": "route",
+        "server": "local"
+      },
+      {
+        "clash_mode": "global",
+        "action": "route",
+        "server": "google"
+      },
+      {
+        "domain_suffix": [
+          "weixin.qq.com",
+          "wx.qq.com",
+          "wechat.com",
+          "qpic.cn",
+          "qlogo.cn",
+          "gtimg.com",
+          "tenpay.com",
+          "url.cn",
+          "weiyun.com"
+        ],
+        "action": "route",
+        "server": "local"
+      }
+    ],
+    "reverse_mapping": true,
+    "strategy": "prefer_ipv4",
+    "final": "proxy-dns",
+    "timeout": "3s",
+    "cache_capacity": 65536,
+    "optimistic": {
+      "enabled": true,
+      "timeout": "5m"
+    }
+  },
+  "inbounds": [
+    {
+      "tag": "tun-in",
+      "type": "tun",
+      "address": [
+        "172.19.0.1/30",
+        "fdfe:dcba:9876::1/126"
+      ],
+      "stack": "system",
+      "auto_route": true,
+      "strict_route": true,
+      "dns_mode": "hijack",
+      "dns_address": "172.19.0.2",
+      "endpoint_independent_nat": true,
+      "udp_timeout": "5m0s"
+    },
+    {
+      "tag": "mixed-in",
+      "type": "mixed",
+      "listen": "127.0.0.1",
+      "listen_port": 7890
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "Proxy",
+      "type": "selector",
+      "outbounds": [
+        "__PROXY_PLACEHOLDER__",
+        "direct"
+      ],
+      "default": "__PROXY_PLACEHOLDER__"
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "default_domain_resolver": "local-dns",
+    "auto_detect_interface": true,
+    "final": "Proxy",
+    "rules": [
+      {
+        "type": "logical",
+        "mode": "and",
+        "rules": [
+          {
+            "ip_version": 6
+          },
+          {
+            "default_interface_address": "2000::/3",
+            "invert": true
+          }
+        ],
+        "action": "reject"
+      },
+      {
+        "process_name": [
+          "Weixin.exe",
+          "WeChatAppEx.exe"
+        ],
+        "ip_version": 6,
+        "action": "reject"
+      },
+      {
+        "process_name": [
+          "Weixin.exe",
+          "WeChatAppEx.exe"
+        ],
+        "network": [
+          "tcp",
+          "udp"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "domain_suffix": [
+          "weixin.qq.com",
+          "wx.qq.com",
+          "wechat.com",
+          "qpic.cn",
+          "qlogo.cn",
+          "gtimg.com",
+          "tenpay.com",
+          "url.cn",
+          "weiyun.com",
+          "mmbiz.qpic.cn",
+          "mmbiz.qlogo.cn"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "domain_suffix": [
+          "__WG_HOME_DOMAIN_PLACEHOLDER__"
+        ],
+        "outbound": "wg-home"
+      },
+      {
+        "ip_cidr": [
+          "192.168.1.0/24"
+        ],
+        "outbound": "wg-home"
+      },
+      {
+        "inbound": [
+          "tun-in",
+          "mixed-in"
+        ],
+        "action": "sniff"
+      },
+      {
+        "type": "logical",
+        "mode": "or",
+        "rules": [
+          {
+            "port": 53
+          },
+          {
+            "protocol": "dns"
+          }
+        ],
+        "action": "hijack-dns"
+      },
+      {
+        "rule_set": "geosite-category-ads-all",
+        "clash_mode": "rule",
+        "action": "reject"
+      },
+      {
+        "clash_mode": "direct",
+        "outbound": "direct"
+      },
+      {
+        "clash_mode": "global",
+        "outbound": "Proxy"
+      },
+      {
+        "domain": [
+          "clash.razord.top",
+          "yacd.metacubex.one",
+          "yacd.haishan.me",
+          "d.metacubex.one"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "ip_is_private": true,
+        "outbound": "direct"
+      },
+      {
+        "rule_set": "geosite-geolocation-!cn",
+        "outbound": "Proxy"
+      },
+      {
+        "rule_set": [
+          "geoip-cn",
+          "geosite-cn"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "protocol": [
+          "stun",
+          "dtls"
+        ],
+        "action": "reject"
+      },
+      {
+        "type": "logical",
+        "mode": "or",
+        "rules": [
+          {
+            "network": "udp",
+            "port": [
+              3478,
+              5349,
+              5350,
+              19302,
+              10000
+            ]
+          },
+          {
+            "domain_regex": "^stun\\..+"
+          },
+          {
+            "domain_keyword": [
+              "stun",
+              "turn",
+              "httpdns"
+            ]
+          },
+          {
+            "protocol": "stun"
+          }
+        ],
+        "action": "reject"
+      },
+      {
+        "action": "route-options",
+        "udp_disable_domain_unmapping": true,
+        "udp_connect": true
+      },
+      {
+        "action": "resolve"
+      }
+    ],
+    "rule_set": [
+      {
+        "tag": "geosite-category-ads-all",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ads-all.srs",
+        "http_client": "direct-download"
+      },
+      {
+        "tag": "geosite-geolocation-!cn",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-!cn.srs",
+        "http_client": "direct-download"
+      },
+      {
+        "tag": "geoip-cn",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/cn.srs",
+        "http_client": "direct-download"
+      },
+      {
+        "tag": "geosite-cn",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs",
+        "http_client": "direct-download"
+      }
+    ],
+    "default_http_client": "direct-download"
+  },
+  "http_clients": [
+    {
+      "tag": "direct-download",
+      "version": 2
+    },
+    {
+      "tag": "proxy-download",
+      "version": 2,
+      "detour": "Proxy"
+    }
+  ],
+  "endpoints": [
+    {
+      "type": "wireguard",
+      "tag": "wg-home",
+      "system": false,
+      "address": [
+        "__WG_ADDRESS__"
+      ],
+      "private_key": "__WG_PRIVATE_KEY__",
+      "mtu": 1420,
+      "peers": [
+        {
+          "address": "__WG_PEER_ADDRESS__",
+          "port": 0,
+          "public_key": "__WG_PEER_PUBLIC_KEY__",
+          "allowed_ips": [
+            "192.168.1.0/24"
+          ],
+          "persistent_keepalive_interval": 25
+        }
+      ]
+    }
+  ]
+}
