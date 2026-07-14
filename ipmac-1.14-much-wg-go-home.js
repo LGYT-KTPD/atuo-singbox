@@ -1,13 +1,15 @@
-// iPhone / Mac sing-box 1.14.0-alpha.36：WireGuard endpoint 回家 + 机场多分组节点注入
-// RealIP DNS-v2 alpha36 长期版：DoT + DNS Hijack + Sniff + Apple Direct 扩大 + endpoint_independent_nat
+// iPhone / Mac sing-box 1.14.0-alpha.44：WireGuard endpoint 回家 + 机场多分组节点注入
+// RealIP DNS-v2 alpha44 长期版：DoT + DNS Hijack + Sniff + Apple Direct 扩大 + endpoint_independent_nat
 
-console.log('🚀 开始生成 WG 多分组回家配置（RealIP DNS-v2 alpha36 长期版）')
+console.log('🚀 开始生成 WG 多分组回家配置（RealIP DNS-v2 alpha44 长期版）')
 
 let { type, name, outbound, includeUnsupportedProxy, url } = $arguments
 type = /^1$|col|组合/i.test(type) ? 'collection' : 'subscription'
 
 const parser = ProxyUtils.JSON5 || JSON
 let config = parser.parse($content ?? $files[0])
+
+applyAlpha44PkStableOptimizations()
 
 function env(name, fallback = undefined) {
   const v = process?.env?.[name]
@@ -58,6 +60,132 @@ function removeDnsRuleStrategy(rule) {
   }
 
   return rule
+}
+
+
+function isUnconditionalIpv6Reject(rule) {
+  return rule?.ip_version === 6 && rule?.action === 'reject'
+}
+
+function isManagedStunReject(rule) {
+  if (!rule || rule?.action !== 'reject') return false
+  const text = JSON.stringify(rule)
+  return text.includes('"stun"') || text.includes('"turn"') || text.includes('"dtls"')
+}
+
+function applyAlpha44PkStableOptimizations() {
+  if (!config.experimental) config.experimental = {}
+  if (!config.experimental.cache_file) config.experimental.cache_file = {}
+  if (!config.experimental.clash_api) config.experimental.clash_api = {}
+  if (!config.dns) config.dns = {}
+  if (!config.route) config.route = {}
+  if (!Array.isArray(config.dns.servers)) config.dns.servers = []
+  if (!Array.isArray(config.dns.rules)) config.dns.rules = []
+  if (!Array.isArray(config.route.rules)) config.route.rules = []
+  if (!Array.isArray(config.route.rule_set)) config.route.rule_set = []
+  if (!Array.isArray(config.http_clients)) config.http_clients = []
+
+  delete config.experimental.clash_api.external_ui_download_detour
+  delete config.experimental.clash_api.external_ui_http_client
+
+  config.experimental.cache_file.enabled = true
+  config.experimental.cache_file.store_dns = true
+  delete config.experimental.cache_file.store_fakeip
+
+  config.dns.reverse_mapping = true
+  config.dns.strategy = 'prefer_ipv4'
+  config.dns.timeout = '3s'
+  config.dns.cache_capacity = 65536
+  config.dns.optimistic = { enabled: true, timeout: '5m' }
+  config.dns.final = 'proxy-dns'
+  config.dns.rules = config.dns.rules.map(removeDnsRuleStrategy)
+
+  config.http_clients = config.http_clients.filter(c =>
+    !['direct', 'proxy'].includes(c?.tag)
+  )
+  config.http_clients.unshift(
+    { tag: 'direct', version: 2 },
+    { tag: 'proxy', version: 2, detour: 'Proxy' }
+  )
+
+  config.route.default_domain_resolver = 'local-dns'
+  config.route.default_http_client = 'direct'
+  config.route.auto_detect_interface = true
+  config.route.final = 'Proxy'
+
+  config.route.rule_set = config.route.rule_set.map(rs => {
+    if (rs?.type === 'remote') {
+      delete rs.download_detour
+      rs.http_client = 'direct'
+    }
+    return rs
+  })
+
+  config.route.rules = config.route.rules.filter(r =>
+    !isUnconditionalIpv6Reject(r) &&
+    !isManagedStunReject(r) &&
+    r?.action !== 'route-options' &&
+    r?.action !== 'resolve'
+  )
+
+  config.route.rules.unshift({
+    type: 'logical',
+    mode: 'and',
+    rules: [
+      { ip_version: 6 },
+      { default_interface_address: '2000::/3', invert: true }
+    ],
+    action: 'reject'
+  })
+
+  const finalOnly = config.route.rules.filter(r =>
+    r && typeof r === 'object' && Object.keys(r).length === 1 && r.outbound
+  )
+  config.route.rules = config.route.rules.filter(r =>
+    !(r && typeof r === 'object' && Object.keys(r).length === 1 && r.outbound)
+  )
+
+  config.route.rules.push(
+    {
+      protocol: ['stun', 'dtls'],
+      action: 'reject'
+    },
+    {
+      type: 'logical',
+      mode: 'or',
+      rules: [
+        { network: 'udp', port: [3478, 5349, 5350, 19302, 10000] },
+        { domain_regex: '^stun\\..+' },
+        { domain_keyword: ['stun', 'turn', 'httpdns'] },
+        { protocol: 'stun' }
+      ],
+      action: 'reject'
+    },
+    {
+      action: 'route-options',
+      udp_disable_domain_unmapping: true,
+      udp_connect: true
+    },
+    { action: 'resolve' },
+    ...finalOnly
+  )
+
+  config.inbounds = (config.inbounds || []).map(i => {
+    if (i?.type !== 'tun') return i
+    const next = {
+      ...i,
+      stack: 'system',
+      auto_route: true,
+      strict_route: true,
+      dns_mode: 'hijack',
+      dns_address: '172.19.0.2',
+      endpoint_independent_nat: true,
+      udp_timeout: i.udp_timeout || '5m0s'
+    }
+    if (next.platform?.http_proxy) delete next.platform.http_proxy
+    if (next.platform && Object.keys(next.platform).length === 0) delete next.platform
+    return next
+  })
 }
 
 function dedupe(arr) {
@@ -162,7 +290,8 @@ function removePublicDirect32Rules() {
     .filter(Boolean)
 }
 
-if (config.experimental?.clash_api?.external_ui_http_client) {
+if (config.experimental?.clash_api) {
+  delete config.experimental.clash_api.external_ui_download_detour
   delete config.experimental.clash_api.external_ui_http_client
 }
 
@@ -189,7 +318,7 @@ config.dns.cache_capacity = 65536
 config.dns.reverse_mapping = true
 config.dns.optimistic = {
   enabled: true,
-  timeout: '1h0m0s'
+  timeout: '5m'
 }
 config.dns.final = 'proxy-dns'
 
@@ -722,7 +851,7 @@ if (Array.isArray(config.route.rule_set)) {
     }
 
     delete rs.download_detour
-    delete rs.http_client
+    rs.http_client = 'direct'
 
     return rs
   })
@@ -753,6 +882,34 @@ if (!localDns) {
 
 removePublicDirect32Rules()
 
+
+// alpha44 最终校验
+if (config.experimental?.clash_api?.external_ui_download_detour !== undefined) {
+  throw new Error('Apple 配置不应包含 external_ui_download_detour')
+}
+if (config.experimental?.clash_api?.external_ui_http_client !== undefined) {
+  throw new Error('Apple 客户端不支持 external_ui_http_client')
+}
+if (config.route?.rule_set?.some(rs => rs?.download_detour !== undefined)) {
+  throw new Error('alpha44 配置不应包含 rule_set.download_detour')
+}
+if (config.route?.rule_set?.some(rs => rs?.type === 'remote' && rs?.http_client !== 'direct')) {
+  throw new Error('远程 rule-set 必须使用 http_client=direct')
+}
+const directHttpClient = config.http_clients?.find(c => c?.tag === 'direct')
+if (directHttpClient?.detour !== undefined) {
+  throw new Error('direct HTTP client 不应设置 detour')
+}
+if (config.dns?.servers?.some(s => s?.strategy !== undefined)) {
+  throw new Error('当前模板不向 dns.servers 写 strategy')
+}
+if (config.dns?.rules?.some(r => JSON.stringify(r).includes('"strategy"'))) {
+  throw new Error('DNS rule action 中不应包含弃用 strategy')
+}
+if (config.route?.rules?.some(r => r?.protocol === 'quic' || (Array.isArray(r?.protocol) && r.protocol.includes('quic')))) {
+  throw new Error('本配置保留 UDP/QUIC，不应加入 QUIC Drop')
+}
+
 $content = JSON.stringify(config, null, 2)
 
-console.log('✅ 完成 WG 多分组回家配置生成（RealIP DNS-v2 alpha36 长期版）')
+console.log('✅ 完成 WG 多分组回家配置生成（RealIP DNS-v2 alpha44 长期版）')
