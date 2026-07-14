@@ -409,8 +409,7 @@
   "http_clients": [
     {
       "tag": "direct-download",
-      "version": 2,
-      "detour": "direct"
+      "version": 2
     },
     {
       "tag": "proxy-download",
