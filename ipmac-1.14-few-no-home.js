@@ -47,7 +47,7 @@ function applyAlpha44PkStableOptimizations() {
   if (!Array.isArray(config.http_clients)) config.http_clients = []
 
   delete config.experimental.clash_api.external_ui_download_detour
-  config.experimental.clash_api.external_ui_http_client = 'direct'
+  delete config.experimental.clash_api.external_ui_http_client
 
   config.experimental.cache_file.enabled = true
   config.experimental.cache_file.store_dns = true
@@ -299,7 +299,7 @@ function ensureProxyServerDirectRules(proxies) {
 
 if (config.experimental?.clash_api) {
   delete config.experimental.clash_api.external_ui_download_detour
-  config.experimental.clash_api.external_ui_http_client = 'direct'
+  delete config.experimental.clash_api.external_ui_http_client
 }
 
 if (!config.experimental) config.experimental = {}
@@ -917,7 +917,10 @@ ensureProxyServerDirectRules(proxies)
 
 // alpha44 最终校验
 if (config.experimental?.clash_api?.external_ui_download_detour !== undefined) {
-  throw new Error('alpha44 配置不应包含 external_ui_download_detour')
+  throw new Error('Apple 配置不应包含 external_ui_download_detour')
+}
+if (config.experimental?.clash_api?.external_ui_http_client !== undefined) {
+  throw new Error('Apple 客户端不支持 external_ui_http_client')
 }
 if (config.route?.rule_set?.some(rs => rs?.download_detour !== undefined)) {
   throw new Error('alpha44 配置不应包含 rule_set.download_detour')
