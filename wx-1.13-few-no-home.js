@@ -47,7 +47,7 @@ function applyAlpha44PkOptimizations() {
     !['direct-download', 'proxy-download'].includes(c?.tag)
   )
   config.http_clients.unshift(
-    { tag: 'direct-download', version: 2, detour: 'direct' },
+    { tag: 'direct-download', version: 2 },
     { tag: 'proxy-download', version: 2, detour: 'Proxy' }
   )
 
@@ -380,6 +380,11 @@ if (!localDns) {
 
 ensureSelfBuiltServerDirectRule(proxies)
 
+
+const directDownloadClient = config.http_clients?.find(c => c?.tag === 'direct-download')
+if (directDownloadClient?.detour !== undefined) {
+  throw new Error('direct-download HTTP client 不应设置 detour；留空即直接连接')
+}
 
 if (config.route?.rule_set?.some(rs => rs?.download_detour !== undefined)) {
   throw new Error('alpha44 最终配置不应包含 download_detour')
