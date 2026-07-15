@@ -70,7 +70,7 @@
       {
         "tag": "home-dns",
         "type": "udp",
-        "server": "192.168.1.1",
+        "server": "192.168.1.118",
         "detour": "wg-home"
       },
       {
@@ -93,7 +93,8 @@
       },
       {
         "domain_suffix": [
-          "__WG_HOME_DOMAIN_PLACEHOLDER__"
+          "ktpd.fun",
+          "xwcac68u.top"
         ],
         "action": "route",
         "server": "home-dns"
@@ -286,7 +287,8 @@
       },
       {
         "domain_suffix": [
-          "__WG_HOME_DOMAIN_PLACEHOLDER__"
+          "ktpd.fun",
+          "xwcac68u.top"
         ],
         "outbound": "wg-home"
       },
