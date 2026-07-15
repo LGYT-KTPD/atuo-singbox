@@ -101,7 +101,7 @@ function requireEnv(names) {
 function applyWgHome() {
   requireEnv(['WG_PRIVATE_KEY','WG_PEER_ADDRESS','WG_PEER_PORT','WG_PEER_PUBLIC_KEY'])
   const homeCidrs = envList('WG_HOME_CIDRS', '192.168.1.0/24')
-  const homeDomains = envList('WG_HOME_DOMAINS', 'home.arpa')
+  const homeDomains = envList('WG_HOME_DOMAINS', 'ktpd.fun,xwcac68u.top')
   if (!Array.isArray(config.endpoints)) config.endpoints = []
   config.endpoints = config.endpoints.filter(e => e?.tag !== 'wg-home')
   config.endpoints.unshift({
@@ -124,7 +124,7 @@ function applyWgHome() {
   config.dns.servers = config.dns.servers.filter(s => s?.tag !== 'home-dns')
   config.dns.servers.push({
     tag:'home-dns', type:'udp',
-    server:env('WG_HOME_DNS','192.168.1.1'),
+    server:env('WG_HOME_DNS','192.168.1.118'),
     detour:'wg-home'
   })
   config.dns.rules = config.dns.rules.filter(r =>
@@ -236,7 +236,7 @@ if (config.experimental?.clash_api?.external_ui_http_client) {
 // alpha44：保留 http_clients
 
 if (!config.route) config.route = {}
-config.route.default_domain_resolver = 'local'
+config.route.default_domain_resolver = 'local-dns'
 // alpha44：保留 default_http_client
 
 if (!config.dns) config.dns = {}
@@ -425,10 +425,36 @@ if (proxyDns && proxyDns.detour !== 'Proxy') {
   throw new Error(`DNS 服务器 ${proxyDns.tag} 必须 detour 到 Proxy`)
 }
 
-const localDns = config.dns?.servers?.find(s => s?.tag === 'local')
+const localDns = config.dns?.servers?.find(s => s?.tag === 'local-dns')
 if (!localDns) {
-  throw new Error('缺少 local DNS，route.default_domain_resolver 会失效')
+  throw new Error('缺少 local-dns，route.default_domain_resolver 会失效')
 }
+
+const homeDns = config.dns?.servers?.find(s => s?.tag === 'home-dns')
+if (!homeDns || homeDns.detour !== 'wg-home') {
+  throw new Error('home-dns 必须存在并 detour 到 wg-home')
+}
+
+const homeDnsRule = config.dns?.rules?.find(r =>
+  r?.server === 'home-dns' &&
+  Array.isArray(r?.domain_suffix) &&
+  r.domain_suffix.length > 0
+)
+if (!homeDnsRule) {
+  throw new Error('缺少内网域名 -> home-dns 规则')
+}
+
+const homeRouteRule = config.route?.rules?.find(r =>
+  r?.outbound === 'wg-home' &&
+  Array.isArray(r?.domain_suffix) &&
+  r.domain_suffix.length > 0
+)
+if (!homeRouteRule) {
+  throw new Error('缺少内网域名 -> wg-home 路由规则')
+}
+
+const localDnsLegacy = config.dns?.servers?.find(s => s?.tag === 'local')
+
 
 ensureSelfBuiltServerDirectRule(proxies)
 
