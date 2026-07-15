@@ -263,6 +263,12 @@
       "type": "selector",
       "outbounds": [
         "auto",
+        "HongKong",
+        "TaiWan",
+        "Singapore",
+        "Japan",
+        "America",
+        "Others",
         "direct"
       ],
       "default": "auto"
