@@ -110,6 +110,59 @@ function setSelectorDefault(tag, preferred) {
   }
 }
 
+
+function ensureMuchAutoAndRegionGroups(proxyTags) {
+  const regionTags = ['HongKong', 'TaiWan', 'Singapore', 'Japan', 'America', 'Others']
+
+  const autoGroup = config.outbounds.find(o => o?.tag === 'auto' && o?.type === 'urltest')
+  if (!autoGroup) throw new Error('模板缺少 auto 自动测速组')
+
+  autoGroup.outbounds = dedupe(proxyTags)
+  if (!autoGroup.outbounds.length) throw new Error('auto 自动测速组没有可用代理节点')
+
+  for (const tag of regionTags) {
+    const group = config.outbounds.find(o => o?.tag === tag && o?.type === 'urltest')
+    if (!group) throw new Error(`模板缺少地区测速组：${tag}`)
+
+    group.outbounds = dedupe(group.outbounds).filter(x => proxyTags.includes(x))
+    if (!group.outbounds.length) group.outbounds = [...proxyTags]
+  }
+}
+
+function enforceMuchProxySelector(proxyTags) {
+  let proxyGroup = config.outbounds.find(o => o?.tag === 'Proxy' && o?.type === 'selector')
+  if (!proxyGroup) {
+    proxyGroup = { tag: 'Proxy', type: 'selector', outbounds: [], default: 'auto' }
+    config.outbounds.unshift(proxyGroup)
+  }
+  proxyGroup.outbounds = dedupe([
+    'auto', 'HongKong', 'TaiWan', 'Singapore', 'Japan', 'America', 'Others',
+    ...proxyTags, 'direct'
+  ])
+  proxyGroup.default = 'auto'
+  return proxyGroup
+}
+
+function validateMuchGroups() {
+  const autoGroup = config.outbounds.find(o => o?.tag === 'auto' && o?.type === 'urltest')
+  if (!autoGroup?.outbounds?.length) throw new Error('auto 自动测速组为空')
+
+  const proxyGroup = config.outbounds.find(o => o?.tag === 'Proxy' && o?.type === 'selector')
+  if (!proxyGroup?.outbounds?.includes('auto')) throw new Error('Proxy 组缺少 auto')
+  if (proxyGroup.default !== 'auto') throw new Error('much 配置的 Proxy.default 必须是 auto')
+
+  for (const group of config.outbounds) {
+    if (group?.type === 'urltest' && !group.outbounds?.length) {
+      throw new Error(`${group.tag} 测速组为空`)
+    }
+    if (group?.type !== 'selector') continue
+    if (!group.outbounds?.length) throw new Error(`${group.tag} 选择器为空`)
+    if (!group.default || !group.outbounds.includes(group.default)) {
+      throw new Error(`${group.tag} 默认值不存在：${group.default}`)
+    }
+  }
+}
+
 requireEnv([
   'WG_PRIVATE_KEY',
   'WG_PEER_ADDRESS',
@@ -476,7 +529,6 @@ config.outbounds = config.outbounds.filter(o => {
   if (!o?.tag) return true
   if (o.tag === 'Proxy') return true
   if (o.tag === 'direct') return true
-  if (o.tag === 'COMPATIBLE') return true
 
   const groupTags = [
     'OpenAI',
@@ -538,6 +590,8 @@ config.outbounds.forEach(o => {
   })
 })
 
+ensureMuchAutoAndRegionGroups(proxyTags)
+
 if (!config.outbounds.some(o => o?.tag === 'direct')) {
   config.outbounds.push({
     type: 'direct',
@@ -564,35 +618,7 @@ proxyGroup.outbounds = dedupe([
   ...proxyTags,
   'direct'
 ])
-
-const compatibleOutbound = {
-  tag: 'COMPATIBLE',
-  type: 'direct'
-}
-
-let hasCompatible = config.outbounds.some(o => o?.tag === 'COMPATIBLE')
-
-config.outbounds.forEach(o => {
-  if (!['selector', 'urltest'].includes(o?.type)) return
-
-  if (!Array.isArray(o.outbounds)) {
-    o.outbounds = []
-  }
-
-  o.outbounds = dedupe(o.outbounds.map(normalizeOutboundName))
-
-  if (o.outbounds.includes('wg-home')) {
-    o.outbounds = o.outbounds.filter(x => x !== 'wg-home')
-  }
-
-  if (o.outbounds.length === 0) {
-    if (!hasCompatible) {
-      config.outbounds.push(compatibleOutbound)
-      hasCompatible = true
-    }
-    o.outbounds.push('COMPATIBLE')
-  }
-})
+proxyGroup = enforceMuchProxySelector(proxyTags)
 
 const selectorDefaults = {
   Proxy: 'auto',
@@ -748,6 +774,8 @@ if (config.route?.rule_set?.some(rs => rs?.type === 'remote' && rs?.http_client 
 if (!config.dns?.rules?.some(r => r?.server === 'home-dns' && Array.isArray(r?.domain_suffix) && r.domain_suffix.length)) throw new Error('缺少内网域名 -> home-dns 规则')
 if (!config.route?.rules?.some(r => r?.outbound === 'wg-home' && Array.isArray(r?.domain_suffix) && r.domain_suffix.length)) throw new Error('缺少内网域名 -> wg-home 路由规则')
 if (!config.route?.rules?.some(r => r?.outbound === 'wg-home' && Array.isArray(r?.ip_cidr) && r.ip_cidr.length)) throw new Error('缺少内网网段 -> wg-home 路由规则')
+
+validateMuchGroups()
 
 $content = JSON.stringify(config, null, 2)
 
