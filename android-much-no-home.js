@@ -172,6 +172,93 @@ function applyAndroidStableOptimizations() {
   })
 }
 
+
+function ensureAndroidMuchGroups(proxyTags) {
+  const regionTags = ['HongKong', 'TaiWan', 'Singapore', 'Japan', 'America', 'Others']
+
+  let autoGroup = config.outbounds.find(o => o?.tag === 'auto' && o?.type === 'urltest')
+  if (!autoGroup) {
+    autoGroup = {
+      tag: 'auto',
+      type: 'urltest',
+      outbounds: [],
+      url: 'http://www.gstatic.com/generate_204',
+      interval: '3m',
+      tolerance: 50,
+      idle_timeout: '30m'
+    }
+    config.outbounds.push(autoGroup)
+  }
+
+  autoGroup.outbounds = uniq(proxyTags)
+  if (!autoGroup.outbounds.length) throw new Error('auto 自动测速组没有可用代理节点')
+
+  for (const tag of regionTags) {
+    const group = config.outbounds.find(o => o?.tag === tag && o?.type === 'urltest')
+    if (!group) throw new Error(`模板缺少地区测速组：${tag}`)
+    group.outbounds = uniq((group.outbounds || []).filter(x => proxyTags.includes(x)))
+    if (!group.outbounds.length) group.outbounds = [...proxyTags]
+  }
+
+  const proxyGroup = config.outbounds.find(o => o?.tag === 'proxy' && o?.type === 'selector')
+  if (!proxyGroup) throw new Error('模板缺少 proxy selector')
+
+  proxyGroup.outbounds = uniq(['auto', ...regionTags, ...proxyTags, 'DIRECT'])
+  proxyGroup.default = 'auto'
+
+  const defaults = {
+    proxy: 'auto',
+    OpenAI: 'America',
+    Google: 'HongKong',
+    Telegram: 'Singapore',
+    Twitter: 'HongKong',
+    Facebook: 'HongKong',
+    BiliBili: 'DIRECT',
+    Bahamut: 'TaiWan',
+    Spotify: 'America',
+    TikTok: 'Japan',
+    Netflix: 'HongKong',
+    'Disney+': 'HongKong',
+    Apple: 'DIRECT',
+    Microsoft: 'DIRECT',
+    Games: 'DIRECT',
+    Streaming: 'HongKong',
+    Global: 'HongKong',
+    China: 'DIRECT'
+  }
+
+  for (const [tag, preferred] of Object.entries(defaults)) {
+    const group = config.outbounds.find(o => o?.tag === tag && o?.type === 'selector')
+    if (!group) continue
+    group.outbounds = uniq(group.outbounds || [])
+    if (group.outbounds.includes(preferred)) group.default = preferred
+    else if (!group.default || !group.outbounds.includes(group.default)) group.default = group.outbounds[0]
+  }
+
+  return proxyGroup
+}
+
+function validateAndroidMuchGroups() {
+  const autoGroup = config.outbounds.find(o => o?.tag === 'auto' && o?.type === 'urltest')
+  if (!autoGroup?.outbounds?.length) throw new Error('auto 自动测速组为空')
+
+  const proxyGroup = config.outbounds.find(o => o?.tag === 'proxy' && o?.type === 'selector')
+  if (!proxyGroup?.outbounds?.includes('auto')) throw new Error('proxy 组缺少 auto')
+  if (proxyGroup.default !== 'auto') throw new Error('proxy.default 必须为 auto')
+
+  for (const group of config.outbounds) {
+    if (group?.type === 'urltest' && !group.outbounds?.length) {
+      throw new Error(`${group.tag} 测速组为空`)
+    }
+    if (group?.type === 'selector') {
+      if (!group.outbounds?.length) throw new Error(`${group.tag} 选择器为空`)
+      if (!group.default || !group.outbounds.includes(group.default)) {
+        throw new Error(`${group.tag} 默认值不存在：${group.default}`)
+      }
+    }
+  }
+}
+
 function createTagRegExp(tagPattern) {
   return new RegExp(tagPattern.replace('ℹ️', ''), tagPattern.includes('ℹ️') ? 'i' : undefined)
 }
@@ -267,8 +354,6 @@ function normalizeConfig() {
   }
 }
 
-normalizeConfig()
-
 let proxies
 if (url) {
   proxies = await produceArtifact({
@@ -289,7 +374,8 @@ if (proxyTags.length === 0) throw new Error('没有获取到代理节点')
 config.outbounds = config.outbounds.filter(o => {
   if (!o?.tag) return true
   if (['proxy', 'DIRECT', 'CN', 'Global', 'OpenAI', 'Google', 'Telegram', 'Twitter', 'Facebook', 'BiliBili', 'Bahamut', 'Spotify', 'TikTok', 'Netflix', 'Disney+', 'Apple', 'Microsoft', 'Games', 'Streaming', 'HongKong', 'TaiWan', 'Singapore', 'Japan', 'America', 'Others'].includes(o.tag)) return true
-  if (o.tag === 'AUTO' || o.tag === 'auto') return false
+  if (o.tag === 'AUTO') return false
+  if (o.tag === 'auto') return true
   if (o.tag === '__PROXY_PLACEHOLDER__') return false
   return !proxyTags.includes(o.tag)
 })
@@ -304,7 +390,7 @@ const outboundRules = (outbound || '')
 
 config.outbounds.forEach(o => {
   if (Array.isArray(o.outbounds)) {
-    o.outbounds = o.outbounds.filter(x => x !== 'auto' && x !== 'AUTO' && x !== '__PROXY_PLACEHOLDER__' && x !== 'home' && x !== 'wg-home')
+    o.outbounds = o.outbounds.filter(x => x !== 'AUTO' && x !== '__PROXY_PLACEHOLDER__' && x !== 'home' && x !== 'wg-home')
   }
 })
 
@@ -317,22 +403,10 @@ config.outbounds.forEach(o => {
   })
 })
 
-for (const groupTag of ['HongKong', 'TaiWan', 'Singapore', 'Japan', 'America', 'Others']) {
-  const group = config.outbounds.find(o => o?.tag === groupTag && Array.isArray(o.outbounds))
-  if (group && group.outbounds.length === 0) {
-    group.outbounds = [...proxyTags]
-  }
-}
 
 config.outbounds.push(...proxies)
 
-const proxyGroup = config.outbounds.find(o => o?.tag === 'proxy' && Array.isArray(o?.outbounds))
-if (!proxyGroup) throw new Error('模板中未找到 tag=proxy 的 selector')
-
-proxyGroup.outbounds = uniq(['Global', ...proxyTags, 'DIRECT'])
-proxyGroup.default = proxyGroup.outbounds[0]
-
-if (proxyGroup.outbounds[0] === 'DIRECT') throw new Error('proxy 组第一个不能是 DIRECT')
+const proxyGroup = ensureAndroidMuchGroups(proxyTags)
 
 const proxyDns = config.dns?.servers?.find(s => s?.tag === 'ggdns')
 if (!proxyDns || proxyDns.detour !== 'proxy') throw new Error('DNS 服务器 ggdns 必须 detour 到 proxy')
@@ -357,6 +431,8 @@ if (config.inbounds?.some(i => i?.dns_mode !== undefined || i?.dns_address !== u
 if (config.route?.rule_set?.some(rs => rs?.type === 'remote' && rs?.download_detour !== 'DIRECT')) {
   throw new Error('Android 1.13.14 远程 rule-set 必须使用 download_detour=DIRECT')
 }
+
+validateAndroidMuchGroups()
 
 $content = JSON.stringify(config, null, 2)
 
