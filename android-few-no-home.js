@@ -294,8 +294,6 @@ function normalizeConfig() {
   }
 }
 
-normalizeConfig()
-
 let proxies
 if (url) {
   proxies = await produceArtifact({
