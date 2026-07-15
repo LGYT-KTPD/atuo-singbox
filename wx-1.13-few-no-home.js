@@ -29,7 +29,7 @@ function applyAlpha44PkOptimizations() {
   if (!Array.isArray(config.http_clients)) config.http_clients = []
 
   delete config.experimental.clash_api.external_ui_download_detour
-  config.experimental.clash_api.external_ui_http_client = 'direct-download'
+  delete config.experimental.clash_api.external_ui_http_client
 
   config.experimental.cache_file.enabled = true
   config.experimental.cache_file.store_dns = true
@@ -165,7 +165,7 @@ applyAlpha44PkOptimizations()
 
 if (!config.experimental) config.experimental = {}
 if (!config.experimental.clash_api) config.experimental.clash_api = {}
-config.experimental.clash_api.external_ui_http_client = 'direct-download'
+delete config.experimental.clash_api.external_ui_http_client
 
 // alpha44：保留 http_clients
 
@@ -395,6 +395,10 @@ if (config.dns?.servers?.some(s => s?.strategy !== undefined)) {
 
 if (config.dns?.rules?.some(r => JSON.stringify(r).includes('"strategy"'))) {
   throw new Error('DNS rule action 中不应包含已弃用 strategy')
+}
+
+if (config.experimental?.clash_api?.external_ui_http_client !== undefined) {
+  throw new Error('当前 Windows SFW 客户端不支持 experimental.clash_api.external_ui_http_client')
 }
 
 $content = JSON.stringify(config, null, 2)
