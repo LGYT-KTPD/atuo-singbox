@@ -144,16 +144,6 @@
         "server": "proxy-dns"
       },
       {
-        "clash_mode": "direct",
-        "action": "route",
-        "server": "local"
-      },
-      {
-        "clash_mode": "global",
-        "action": "route",
-        "server": "google"
-      },
-      {
         "domain_suffix": [
           "weixin.qq.com",
           "wx.qq.com",
@@ -166,7 +156,7 @@
           "weiyun.com"
         ],
         "action": "route",
-        "server": "local"
+        "server": "local-dns"
       }
     ],
     "reverse_mapping": true,
