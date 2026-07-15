@@ -83,6 +83,59 @@ function setSelectorDefault(tag, preferred) {
   }
 }
 
+
+function ensureMuchAutoAndRegionGroups(proxyTags) {
+  const regionTags = ['HongKong', 'TaiWan', 'Singapore', 'Japan', 'America', 'Others']
+
+  const autoGroup = config.outbounds.find(o => o?.tag === 'auto' && o?.type === 'urltest')
+  if (!autoGroup) throw new Error('模板缺少 auto 自动测速组')
+
+  autoGroup.outbounds = dedupe(proxyTags)
+  if (!autoGroup.outbounds.length) throw new Error('auto 自动测速组没有可用代理节点')
+
+  for (const tag of regionTags) {
+    const group = config.outbounds.find(o => o?.tag === tag && o?.type === 'urltest')
+    if (!group) throw new Error(`模板缺少地区测速组：${tag}`)
+
+    group.outbounds = dedupe(group.outbounds).filter(x => proxyTags.includes(x))
+    if (!group.outbounds.length) group.outbounds = [...proxyTags]
+  }
+}
+
+function enforceMuchProxySelector(proxyTags) {
+  let proxyGroup = config.outbounds.find(o => o?.tag === 'Proxy' && o?.type === 'selector')
+  if (!proxyGroup) {
+    proxyGroup = { tag: 'Proxy', type: 'selector', outbounds: [], default: 'auto' }
+    config.outbounds.unshift(proxyGroup)
+  }
+  proxyGroup.outbounds = dedupe([
+    'auto', 'HongKong', 'TaiWan', 'Singapore', 'Japan', 'America', 'Others',
+    ...proxyTags, 'direct'
+  ])
+  proxyGroup.default = 'auto'
+  return proxyGroup
+}
+
+function validateMuchGroups() {
+  const autoGroup = config.outbounds.find(o => o?.tag === 'auto' && o?.type === 'urltest')
+  if (!autoGroup?.outbounds?.length) throw new Error('auto 自动测速组为空')
+
+  const proxyGroup = config.outbounds.find(o => o?.tag === 'Proxy' && o?.type === 'selector')
+  if (!proxyGroup?.outbounds?.includes('auto')) throw new Error('Proxy 组缺少 auto')
+  if (proxyGroup.default !== 'auto') throw new Error('much 配置的 Proxy.default 必须是 auto')
+
+  for (const group of config.outbounds) {
+    if (group?.type === 'urltest' && !group.outbounds?.length) {
+      throw new Error(`${group.tag} 测速组为空`)
+    }
+    if (group?.type !== 'selector') continue
+    if (!group.outbounds?.length) throw new Error(`${group.tag} 选择器为空`)
+    if (!group.default || !group.outbounds.includes(group.default)) {
+      throw new Error(`${group.tag} 默认值不存在：${group.default}`)
+    }
+  }
+}
+
 function normalizeTemplate() {
   if (!config.experimental) config.experimental = {}
   if (!config.experimental.cache_file) config.experimental.cache_file = {}
@@ -306,7 +359,7 @@ const fixedGroupTags = [
   'BiliBili', 'Bahamut', 'Spotify', 'TikTok', 'Netflix', 'Disney+',
   'Apple', 'Microsoft', 'Games', 'Streaming', 'Global', 'China',
   'HongKong', 'TaiWan', 'Singapore', 'Japan', 'America', 'Others',
-  'auto', 'direct', 'COMPATIBLE'
+  'auto', 'direct'
 ]
 
 config.outbounds = config.outbounds.filter(o =>
@@ -330,22 +383,9 @@ for (const group of config.outbounds) {
   }
 }
 
-const compatible = { tag: 'COMPATIBLE', type: 'direct' }
-let hasCompatible = config.outbounds.some(o => o?.tag === 'COMPATIBLE')
-
-for (const group of config.outbounds) {
-  if (!['selector', 'urltest'].includes(group?.type)) continue
-  group.outbounds = dedupe(group.outbounds).filter(x => !['home', 'wg-home'].includes(x))
-  if (!group.outbounds.length) {
-    if (!hasCompatible) {
-      config.outbounds.push(compatible)
-      hasCompatible = true
-    }
-    group.outbounds = ['COMPATIBLE']
-  }
-}
-
 config.outbounds.push(...proxies)
+
+ensureMuchAutoAndRegionGroups(proxyTags)
 
 let proxyGroup = config.outbounds.find(o => o?.tag === 'Proxy' && o?.type === 'selector')
 if (!proxyGroup) {
@@ -353,6 +393,7 @@ if (!proxyGroup) {
   config.outbounds.unshift(proxyGroup)
 }
 proxyGroup.outbounds = dedupe(['auto', ...proxyTags, 'direct'])
+proxyGroup = enforceMuchProxySelector(proxyTags)
 
 if (!config.outbounds.some(o => o?.tag === 'direct')) {
   config.outbounds.push({ type: 'direct', tag: 'direct' })
@@ -421,6 +462,8 @@ if (config.dns.rules.some(r => JSON.stringify(r).includes('"strategy"'))) {
 if (config.route.rules.some(r => r?.protocol === 'quic' || (Array.isArray(r?.protocol) && r.protocol.includes('quic')))) {
   throw new Error('本配置保留 UDP/QUIC，不应加入 QUIC Drop')
 }
+
+validateMuchGroups()
 
 $content = JSON.stringify(config, null, 2)
 console.log('✅ 完成 iPhone / Mac much no-home 配置生成（alpha44）')
