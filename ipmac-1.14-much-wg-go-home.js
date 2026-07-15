@@ -9,8 +9,6 @@ type = /^1$|col|组合/i.test(type) ? 'collection' : 'subscription'
 const parser = ProxyUtils.JSON5 || JSON
 let config = parser.parse($content ?? $files[0])
 
-applyAlpha44PkStableOptimizations()
-
 function env(name, fallback = undefined) {
   const v = process?.env?.[name]
   if (v === undefined || v === null || String(v).trim() === '') return fallback
@@ -60,132 +58,6 @@ function removeDnsRuleStrategy(rule) {
   }
 
   return rule
-}
-
-
-function isUnconditionalIpv6Reject(rule) {
-  return rule?.ip_version === 6 && rule?.action === 'reject'
-}
-
-function isManagedStunReject(rule) {
-  if (!rule || rule?.action !== 'reject') return false
-  const text = JSON.stringify(rule)
-  return text.includes('"stun"') || text.includes('"turn"') || text.includes('"dtls"')
-}
-
-function applyAlpha44PkStableOptimizations() {
-  if (!config.experimental) config.experimental = {}
-  if (!config.experimental.cache_file) config.experimental.cache_file = {}
-  if (!config.experimental.clash_api) config.experimental.clash_api = {}
-  if (!config.dns) config.dns = {}
-  if (!config.route) config.route = {}
-  if (!Array.isArray(config.dns.servers)) config.dns.servers = []
-  if (!Array.isArray(config.dns.rules)) config.dns.rules = []
-  if (!Array.isArray(config.route.rules)) config.route.rules = []
-  if (!Array.isArray(config.route.rule_set)) config.route.rule_set = []
-  if (!Array.isArray(config.http_clients)) config.http_clients = []
-
-  delete config.experimental.clash_api.external_ui_download_detour
-  delete config.experimental.clash_api.external_ui_http_client
-
-  config.experimental.cache_file.enabled = true
-  config.experimental.cache_file.store_dns = true
-  delete config.experimental.cache_file.store_fakeip
-
-  config.dns.reverse_mapping = true
-  config.dns.strategy = 'prefer_ipv4'
-  config.dns.timeout = '3s'
-  config.dns.cache_capacity = 65536
-  config.dns.optimistic = { enabled: true, timeout: '5m' }
-  config.dns.final = 'proxy-dns'
-  config.dns.rules = config.dns.rules.map(removeDnsRuleStrategy)
-
-  config.http_clients = config.http_clients.filter(c =>
-    !['direct', 'proxy'].includes(c?.tag)
-  )
-  config.http_clients.unshift(
-    { tag: 'direct', version: 2 },
-    { tag: 'proxy', version: 2, detour: 'Proxy' }
-  )
-
-  config.route.default_domain_resolver = 'local-dns'
-  config.route.default_http_client = 'direct'
-  config.route.auto_detect_interface = true
-  config.route.final = 'Proxy'
-
-  config.route.rule_set = config.route.rule_set.map(rs => {
-    if (rs?.type === 'remote') {
-      delete rs.download_detour
-      rs.http_client = 'direct'
-    }
-    return rs
-  })
-
-  config.route.rules = config.route.rules.filter(r =>
-    !isUnconditionalIpv6Reject(r) &&
-    !isManagedStunReject(r) &&
-    r?.action !== 'route-options' &&
-    r?.action !== 'resolve'
-  )
-
-  config.route.rules.unshift({
-    type: 'logical',
-    mode: 'and',
-    rules: [
-      { ip_version: 6 },
-      { default_interface_address: '2000::/3', invert: true }
-    ],
-    action: 'reject'
-  })
-
-  const finalOnly = config.route.rules.filter(r =>
-    r && typeof r === 'object' && Object.keys(r).length === 1 && r.outbound
-  )
-  config.route.rules = config.route.rules.filter(r =>
-    !(r && typeof r === 'object' && Object.keys(r).length === 1 && r.outbound)
-  )
-
-  config.route.rules.push(
-    {
-      protocol: ['stun', 'dtls'],
-      action: 'reject'
-    },
-    {
-      type: 'logical',
-      mode: 'or',
-      rules: [
-        { network: 'udp', port: [3478, 5349, 5350, 19302, 10000] },
-        { domain_regex: '^stun\\..+' },
-        { domain_keyword: ['stun', 'turn', 'httpdns'] },
-        { protocol: 'stun' }
-      ],
-      action: 'reject'
-    },
-    {
-      action: 'route-options',
-      udp_disable_domain_unmapping: true,
-      udp_connect: true
-    },
-    { action: 'resolve' },
-    ...finalOnly
-  )
-
-  config.inbounds = (config.inbounds || []).map(i => {
-    if (i?.type !== 'tun') return i
-    const next = {
-      ...i,
-      stack: 'system',
-      auto_route: true,
-      strict_route: true,
-      dns_mode: 'hijack',
-      dns_address: '172.19.0.2',
-      endpoint_independent_nat: true,
-      udp_timeout: i.udp_timeout || '5m0s'
-    }
-    if (next.platform?.http_proxy) delete next.platform.http_proxy
-    if (next.platform && Object.keys(next.platform).length === 0) delete next.platform
-    return next
-  })
 }
 
 function dedupe(arr) {
@@ -290,10 +162,10 @@ function removePublicDirect32Rules() {
     .filter(Boolean)
 }
 
-if (config.experimental?.clash_api) {
-  delete config.experimental.clash_api.external_ui_download_detour
-  delete config.experimental.clash_api.external_ui_http_client
-}
+if (!config.experimental) config.experimental = {}
+if (!config.experimental.clash_api) config.experimental.clash_api = {}
+delete config.experimental.clash_api.external_ui_http_client
+delete config.experimental.clash_api.external_ui_download_detour
 
 if (!config.experimental) config.experimental = {}
 if (!config.experimental.cache_file) config.experimental.cache_file = {}
@@ -349,18 +221,17 @@ config.dns.servers.unshift(
     type: 'hosts',
     tag: 'hosts-fix',
     predefined: {
-      'dns.google': [
-        '8.8.8.8',
-        '8.8.4.4'
+      'dns.google': ['8.8.8.8', '8.8.4.4'],
+      'dns.alidns.com': ['223.5.5.5', '223.6.6.6'],
+      'cloudflare-dns.com': ['104.16.248.249', '104.16.249.249'],
+      'dns.cloudflare.com': ['104.16.248.249', '104.16.249.249'],
+      'raw.githubusercontent.com': [
+        '185.199.108.133',
+        '185.199.109.133',
+        '185.199.110.133',
+        '185.199.111.133'
       ],
-      'dns.alidns.com': [
-        '223.5.5.5',
-        '223.6.6.6'
-      ],
-      'cloudflare-dns.com': [
-        '104.16.248.249',
-        '104.16.249.249'
-      ]
+      'cdn.jsdelivr.net': ['104.16.89.20', '104.16.90.20']
     }
   },
   {
@@ -383,7 +254,7 @@ config.dns.servers.unshift(
   {
     tag: 'home-dns',
     type: 'udp',
-    server: '192.168.1.118',
+    server: env('WG_HOME_DNS', '192.168.1.118'),
     detour: 'wg-home'
   },
   {
@@ -458,10 +329,7 @@ config.dns.rules = config.dns.rules.filter(r => {
 })
 
 config.dns.rules.unshift({
-  domain_suffix: [
-    'ktpd.fun',
-    'xwcac68u.top'
-  ],
+  domain_suffix: envList('WG_HOME_DOMAINS', 'ktpd.fun,xwcac68u.top'),
   action: 'route',
   server: 'home-dns'
 })
@@ -777,23 +645,13 @@ config.route.rules = config.route.rules.filter(r => {
 })
 
 const homeCIDRs = envList('WG_HOME_CIDRS', '192.168.1.0/24')
+const homeDomains = envList('WG_HOME_DOMAINS', 'ktpd.fun,xwcac68u.top')
 
-config.route.rules = config.route.rules.map(r => {
-  if (r?.outbound === 'wg-home') {
-    return {
-      ...r,
-      ip_cidr: homeCIDRs
-    }
-  }
-  return r
-})
-
-if (!config.route.rules.some(r => r?.outbound === 'wg-home')) {
-  config.route.rules.splice(3, 0, {
-    ip_cidr: homeCIDRs,
-    outbound: 'wg-home'
-  })
-}
+config.route.rules = config.route.rules.filter(r => r?.outbound !== 'wg-home')
+config.route.rules.splice(1, 0,
+  { domain_suffix: homeDomains, outbound: 'wg-home' },
+  { ip_cidr: homeCIDRs, outbound: 'wg-home' }
+)
 
 const appleDirectDomains = [
   'apple.com',
@@ -883,32 +741,13 @@ if (!localDns) {
 removePublicDirect32Rules()
 
 
-// alpha44 最终校验
-if (config.experimental?.clash_api?.external_ui_download_detour !== undefined) {
-  throw new Error('Apple 配置不应包含 external_ui_download_detour')
-}
-if (config.experimental?.clash_api?.external_ui_http_client !== undefined) {
-  throw new Error('Apple 客户端不支持 external_ui_http_client')
-}
-if (config.route?.rule_set?.some(rs => rs?.download_detour !== undefined)) {
-  throw new Error('alpha44 配置不应包含 rule_set.download_detour')
-}
-if (config.route?.rule_set?.some(rs => rs?.type === 'remote' && rs?.http_client !== 'direct')) {
-  throw new Error('远程 rule-set 必须使用 http_client=direct')
-}
-const directHttpClient = config.http_clients?.find(c => c?.tag === 'direct')
-if (directHttpClient?.detour !== undefined) {
-  throw new Error('direct HTTP client 不应设置 detour')
-}
-if (config.dns?.servers?.some(s => s?.strategy !== undefined)) {
-  throw new Error('当前模板不向 dns.servers 写 strategy')
-}
-if (config.dns?.rules?.some(r => JSON.stringify(r).includes('"strategy"'))) {
-  throw new Error('DNS rule action 中不应包含弃用 strategy')
-}
-if (config.route?.rules?.some(r => r?.protocol === 'quic' || (Array.isArray(r?.protocol) && r.protocol.includes('quic')))) {
-  throw new Error('本配置保留 UDP/QUIC，不应加入 QUIC Drop')
-}
+if (config.experimental?.clash_api?.external_ui_http_client !== undefined) throw new Error('Apple 客户端不支持 external_ui_http_client')
+if (config.experimental?.clash_api?.external_ui_download_detour !== undefined) throw new Error('Apple 配置不应包含 external_ui_download_detour')
+if (config.route?.rule_set?.some(rs => rs?.download_detour !== undefined)) throw new Error('alpha44 不应包含 rule_set.download_detour')
+if (config.route?.rule_set?.some(rs => rs?.type === 'remote' && rs?.http_client !== 'direct')) throw new Error('远程 rule-set 必须使用 http_client=direct')
+if (!config.dns?.rules?.some(r => r?.server === 'home-dns' && Array.isArray(r?.domain_suffix) && r.domain_suffix.length)) throw new Error('缺少内网域名 -> home-dns 规则')
+if (!config.route?.rules?.some(r => r?.outbound === 'wg-home' && Array.isArray(r?.domain_suffix) && r.domain_suffix.length)) throw new Error('缺少内网域名 -> wg-home 路由规则')
+if (!config.route?.rules?.some(r => r?.outbound === 'wg-home' && Array.isArray(r?.ip_cidr) && r.ip_cidr.length)) throw new Error('缺少内网网段 -> wg-home 路由规则')
 
 $content = JSON.stringify(config, null, 2)
 
