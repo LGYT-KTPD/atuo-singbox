@@ -142,33 +142,6 @@
         "rule_set": "geosite-geolocation-!cn",
         "action": "route",
         "server": "proxy-dns"
-      },
-      {
-        "clash_mode": "direct",
-        "action": "route",
-        "server": "local"
-      },
-      {
-        "clash_mode": "global",
-        "action": "route",
-        "server": "google"
-      },
-      {
-        "domain_suffix": [
-          "weixin.qq.com",
-          "wx.qq.com",
-          "wechat.com",
-          "qpic.cn",
-          "qlogo.cn",
-          "gtimg.com",
-          "tenpay.com",
-          "url.cn",
-          "weiyun.com",
-          "mmbiz.qpic.cn",
-          "mmbiz.qlogo.cn"
-        ],
-        "action": "route",
-        "server": "local"
       }
     ],
     "reverse_mapping": true,
@@ -209,9 +182,16 @@
       "tag": "Proxy",
       "type": "selector",
       "outbounds": [
-        "__PROXY_PLACEHOLDER__",
+        "auto",
+        "HongKong",
+        "TaiWan",
+        "Singapore",
+        "Japan",
+        "America",
+        "Others",
         "direct"
-      ]
+      ],
+      "default": "auto"
     },
     {
       "tag": "OpenAI",
@@ -222,7 +202,8 @@
         "Japan",
         "America",
         "Others"
-      ]
+      ],
+      "default": "America"
     },
     {
       "tag": "Google",
@@ -234,7 +215,8 @@
         "Japan",
         "America",
         "Others"
-      ]
+      ],
+      "default": "HongKong"
     },
     {
       "tag": "Telegram",
@@ -246,7 +228,8 @@
         "Japan",
         "America",
         "Others"
-      ]
+      ],
+      "default": "Singapore"
     },
     {
       "tag": "Twitter",
@@ -258,7 +241,8 @@
         "Japan",
         "America",
         "Others"
-      ]
+      ],
+      "default": "HongKong"
     },
     {
       "tag": "Facebook",
@@ -270,7 +254,8 @@
         "Japan",
         "America",
         "Others"
-      ]
+      ],
+      "default": "HongKong"
     },
     {
       "tag": "BiliBili",
@@ -279,7 +264,8 @@
         "direct",
         "HongKong",
         "TaiWan"
-      ]
+      ],
+      "default": "direct"
     },
     {
       "tag": "Bahamut",
@@ -287,7 +273,8 @@
       "outbounds": [
         "TaiWan",
         "Proxy"
-      ]
+      ],
+      "default": "TaiWan"
     },
     {
       "tag": "Spotify",
@@ -299,7 +286,8 @@
         "Japan",
         "America",
         "Others"
-      ]
+      ],
+      "default": "America"
     },
     {
       "tag": "TikTok",
@@ -310,7 +298,8 @@
         "Singapore",
         "Japan",
         "America"
-      ]
+      ],
+      "default": "Japan"
     },
     {
       "tag": "Netflix",
@@ -322,7 +311,8 @@
         "Japan",
         "America",
         "Others"
-      ]
+      ],
+      "default": "HongKong"
     },
     {
       "tag": "Disney+",
@@ -334,7 +324,8 @@
         "Japan",
         "America",
         "Others"
-      ]
+      ],
+      "default": "HongKong"
     },
     {
       "tag": "Apple",
@@ -347,7 +338,8 @@
         "Japan",
         "America",
         "Others"
-      ]
+      ],
+      "default": "direct"
     },
     {
       "tag": "Microsoft",
@@ -360,7 +352,8 @@
         "Japan",
         "America",
         "Others"
-      ]
+      ],
+      "default": "direct"
     },
     {
       "tag": "Games",
@@ -373,7 +366,8 @@
         "Japan",
         "America",
         "Others"
-      ]
+      ],
+      "default": "direct"
     },
     {
       "tag": "Streaming",
@@ -385,7 +379,8 @@
         "Japan",
         "America",
         "Others"
-      ]
+      ],
+      "default": "HongKong"
     },
     {
       "tag": "Global",
@@ -398,14 +393,16 @@
         "America",
         "Others",
         "direct"
-      ]
+      ],
+      "default": "HongKong"
     },
     {
       "tag": "China",
       "type": "selector",
       "outbounds": [
         "direct"
-      ]
+      ],
+      "default": "direct"
     },
     {
       "tag": "HongKong",
