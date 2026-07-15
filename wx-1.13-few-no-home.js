@@ -57,7 +57,7 @@ function applyAlpha44PkOptimizations() {
   config.route.rule_set = config.route.rule_set.map(rs => {
     if (rs?.type === 'remote') {
       delete rs.download_detour
-      rs.http_client = 'direct-download'
+    rs.http_client = 'direct-download'
     }
     return rs
   })
@@ -163,14 +163,14 @@ try {
 
 applyAlpha44PkOptimizations()
 
-if (config.experimental?.clash_api?.external_ui_http_client) {
-  delete config.experimental.clash_api.external_ui_http_client
-}
+if (!config.experimental) config.experimental = {}
+if (!config.experimental.clash_api) config.experimental.clash_api = {}
+config.experimental.clash_api.external_ui_http_client = 'direct-download'
 
 // alpha44：保留 http_clients
 
 if (!config.route) config.route = {}
-config.route.default_domain_resolver = 'local'
+config.route.default_domain_resolver = 'local-dns'
 // alpha44：保留 default_http_client
 
 if (!config.dns) config.dns = {}
@@ -222,7 +222,7 @@ const downloadDomains = [
 ]
 
 let downloadDnsRule = config.dns.rules.find(r =>
-  r?.server === 'local' &&
+  r?.server === 'local-dns' &&
   Array.isArray(r?.domain_suffix) &&
   (
     r.domain_suffix.includes('ghfast.top') ||
@@ -235,7 +235,7 @@ if (!downloadDnsRule) {
   downloadDnsRule = {
     domain_suffix: [],
     action: 'route',
-    server: 'local'
+    server: 'local-dns'
   }
 
   config.dns.rules.splice(
@@ -270,7 +270,7 @@ if (Array.isArray(config.route.rule_set)) {
     }
 
     delete rs.download_detour
-      rs.http_client = 'direct-download'
+    rs.http_client = 'direct-download'
 
     if (rs?.type === 'remote') {
       rs.http_client = 'direct-download'
