@@ -33,6 +33,10 @@
             "104.16.248.249",
             "104.16.249.249"
           ],
+          "dns.cloudflare.com": [
+            "104.16.248.249",
+            "104.16.249.249"
+          ],
           "raw.githubusercontent.com": [
             "185.199.108.133",
             "185.199.109.133",
@@ -193,7 +197,7 @@
     "cache_capacity": 65536,
     "optimistic": {
       "enabled": true,
-      "timeout": "1h0m0s"
+      "timeout": "5m"
     }
   },
   "inbounds": [
@@ -209,7 +213,8 @@
       "strict_route": true,
       "dns_mode": "hijack",
       "dns_address": "172.19.0.2",
-      "endpoint_independent_nat": true
+      "endpoint_independent_nat": true,
+      "udp_timeout": "5m0s"
     },
     {
       "tag": "mixed-in",
@@ -514,7 +519,17 @@
     "final": "Proxy",
     "rules": [
       {
-        "ip_version": 6,
+        "type": "logical",
+        "mode": "and",
+        "rules": [
+          {
+            "ip_version": 6
+          },
+          {
+            "default_interface_address": "2000::/3",
+            "invert": true
+          }
+        ],
         "action": "reject"
       },
       {
@@ -691,6 +706,51 @@
           "geosite-cn"
         ],
         "outbound": "China"
+      },
+      {
+        "protocol": [
+          "stun",
+          "dtls"
+        ],
+        "action": "reject"
+      },
+      {
+        "type": "logical",
+        "mode": "or",
+        "rules": [
+          {
+            "network": "udp",
+            "port": [
+              3478,
+              5349,
+              5350,
+              19302,
+              10000
+            ]
+          },
+          {
+            "domain_regex": "^stun\\..+"
+          },
+          {
+            "domain_keyword": [
+              "stun",
+              "turn",
+              "httpdns"
+            ]
+          },
+          {
+            "protocol": "stun"
+          }
+        ],
+        "action": "reject"
+      },
+      {
+        "action": "route-options",
+        "udp_disable_domain_unmapping": true,
+        "udp_connect": true
+      },
+      {
+        "action": "resolve"
       }
     ],
     "rule_set": [
