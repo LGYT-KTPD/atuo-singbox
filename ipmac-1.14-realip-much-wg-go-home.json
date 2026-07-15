@@ -567,6 +567,13 @@
         "action": "reject"
       },
       {
+        "domain_suffix": [
+          "ktpd.fun",
+          "xwcac68u.top"
+        ],
+        "outbound": "wg-home"
+      },
+      {
         "ip_cidr": [
           "192.168.1.0/24"
         ],
@@ -1010,11 +1017,6 @@
     {
       "tag": "direct",
       "version": 2
-    },
-    {
-      "tag": "proxy",
-      "version": 2,
-      "detour": "Proxy"
     }
   ]
 }
