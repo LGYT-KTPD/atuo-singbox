@@ -65,7 +65,7 @@ function applyAlpha44PkOptimizations() {
   config.route.rule_set = config.route.rule_set.map(rs => {
     if (rs?.type === 'remote') {
       delete rs.download_detour
-      rs.http_client = 'direct-download'
+    rs.http_client = 'direct-download'
     }
     return rs
   })
@@ -109,6 +109,91 @@ function uniq(arr) {
   return [...new Set(arr.filter(Boolean))]
 }
 
+
+
+function ensureWindowsMuchGroups(proxyTags) {
+  const regionTags = ['HongKong', 'TaiWan', 'Singapore', 'Japan', 'America', 'Others']
+
+  const autoGroup = config.outbounds.find(o => o?.tag === 'auto' && o?.type === 'urltest')
+  if (!autoGroup) throw new Error('模板缺少 auto 自动测速组')
+  autoGroup.outbounds = uniq(proxyTags)
+  if (!autoGroup.outbounds.length) throw new Error('auto 自动测速组没有可用节点')
+
+  for (const tag of regionTags) {
+    const group = config.outbounds.find(o => o?.tag === tag && o?.type === 'urltest')
+    if (!group) throw new Error(`模板缺少地区测速组：${tag}`)
+    group.outbounds = uniq((group.outbounds || []).filter(x => proxyTags.includes(x)))
+    if (!group.outbounds.length) group.outbounds = [...proxyTags]
+  }
+
+  let proxyGroup = config.outbounds.find(o => o?.tag === 'Proxy' && o?.type === 'selector')
+  if (!proxyGroup) {
+    proxyGroup = { tag: 'Proxy', type: 'selector', outbounds: [], default: 'auto' }
+    config.outbounds.unshift(proxyGroup)
+  }
+  proxyGroup.outbounds = uniq([
+    'auto',
+    ...regionTags,
+    ...proxyTags,
+    'direct'
+  ])
+  proxyGroup.default = 'auto'
+
+  const defaults = {
+    Proxy: 'auto',
+    OpenAI: 'America',
+    Google: 'HongKong',
+    Telegram: 'Singapore',
+    Twitter: 'HongKong',
+    Facebook: 'HongKong',
+    BiliBili: 'direct',
+    Bahamut: 'TaiWan',
+    Spotify: 'America',
+    TikTok: 'Japan',
+    Netflix: 'HongKong',
+    'Disney+': 'HongKong',
+    Apple: 'direct',
+    Microsoft: 'direct',
+    Games: 'direct',
+    Streaming: 'HongKong',
+    Global: 'HongKong',
+    China: 'direct'
+  }
+
+  for (const [tag, preferred] of Object.entries(defaults)) {
+    const group = config.outbounds.find(o => o?.tag === tag && o?.type === 'selector')
+    if (!group) continue
+    group.outbounds = uniq(group.outbounds || [])
+    if (group.outbounds.includes(preferred)) {
+      group.default = preferred
+    } else if (!group.default || !group.outbounds.includes(group.default)) {
+      group.default = group.outbounds[0]
+    }
+  }
+
+  return proxyGroup
+}
+
+function validateWindowsMuchGroups() {
+  const autoGroup = config.outbounds.find(o => o?.tag === 'auto' && o?.type === 'urltest')
+  if (!autoGroup?.outbounds?.length) throw new Error('auto 自动测速组为空')
+
+  const proxyGroup = config.outbounds.find(o => o?.tag === 'Proxy' && o?.type === 'selector')
+  if (!proxyGroup?.outbounds?.includes('auto')) throw new Error('Proxy 组缺少 auto')
+  if (proxyGroup.default !== 'auto') throw new Error('Proxy.default 必须为 auto')
+
+  for (const group of config.outbounds) {
+    if (group?.type === 'urltest' && !group.outbounds?.length) {
+      throw new Error(`${group.tag} 测速组为空`)
+    }
+    if (group?.type === 'selector') {
+      if (!group.outbounds?.length) throw new Error(`${group.tag} 选择器为空`)
+      if (!group.default || !group.outbounds.includes(group.default)) {
+        throw new Error(`${group.tag} 默认值不存在：${group.default}`)
+      }
+    }
+  }
+}
 
 function isPublicIPv4Cidr32(cidr) {
   if (typeof cidr !== 'string') return false
@@ -154,15 +239,15 @@ function removePublicDirect32Rules() {
     .filter(Boolean)
 }
 
-if (config.experimental?.clash_api?.external_ui_http_client) {
-  delete config.experimental.clash_api.external_ui_http_client
-}
+if (!config.experimental) config.experimental = {}
+if (!config.experimental.clash_api) config.experimental.clash_api = {}
+config.experimental.clash_api.external_ui_http_client = 'direct-download'
 
 // Windows SFW 1.14-alpha44 不支持这些
 // alpha44：保留 http_clients
 
 if (!config.route) config.route = {}
-config.route.default_domain_resolver = 'local'
+config.route.default_domain_resolver = 'local-dns'
 // alpha44：保留 default_http_client
 
 if (!config.dns) config.dns = {}
@@ -205,15 +290,6 @@ if (Array.isArray(config.route.rules)) {
   )
 }
 
-// 删除所有 1.13.14 不支持的 default 字段
-if (Array.isArray(config.outbounds)) {
-  config.outbounds = config.outbounds.map(o => {
-    if (o && typeof o === 'object') {
-      delete o.default
-    }
-    return o
-  })
-}
 
 // 规则下载域名走 local，避免 rule-set 下载依赖 Proxy
 const downloadDomains = [
@@ -227,7 +303,7 @@ const downloadDomains = [
 ]
 
 let downloadDnsRule = config.dns.rules.find(r =>
-  r?.server === 'local' &&
+  r?.server === 'local-dns' &&
   Array.isArray(r?.domain_suffix) &&
   (
     r.domain_suffix.includes('ghfast.top') ||
@@ -240,7 +316,7 @@ if (!downloadDnsRule) {
   downloadDnsRule = {
     domain_suffix: [],
     action: 'route',
-    server: 'local'
+    server: 'local-dns'
   }
 
   config.dns.rules.splice(
@@ -276,7 +352,7 @@ if (Array.isArray(config.route.rule_set)) {
     }
 
     delete rs.download_detour
-      rs.http_client = 'direct-download'
+    rs.http_client = 'direct-download'
 
     if (rs?.type === 'remote') {
       rs.http_client = 'direct-download'
@@ -327,8 +403,7 @@ config.outbounds = config.outbounds.filter(o => {
   if (!o?.tag) return true
   if (o.tag === 'direct') return true
   if (o.tag === 'Proxy') return true
-  if (o.tag === 'COMPATIBLE') return false
-  if (o.tag === 'auto') return false
+  if (o.tag === 'auto') return true
   if (o.tag === '__PROXY_PLACEHOLDER__') return false
   return !proxyTags.includes(o.tag)
 })
@@ -353,8 +428,7 @@ config.outbounds.forEach(o => {
 
   if (Array.isArray(o.outbounds)) {
     o.outbounds = o.outbounds.filter(x =>
-      x !== 'auto' &&
-      x !== '__PROXY_PLACEHOLDER__' &&
+            x !== '__PROXY_PLACEHOLDER__' &&
       x !== 'home' &&
       x !== 'wg-home'
     )
@@ -378,53 +452,20 @@ config.outbounds.forEach(o => {
   })
 })
 
-// 空组兜底
-const compatibleOutbound = {
-  tag: 'COMPATIBLE',
-  type: 'direct',
-}
-
-let hasCompatible = config.outbounds.some(o => o?.tag === 'COMPATIBLE')
-
-config.outbounds.forEach(o => {
-  outboundRules.forEach(([outboundRegex]) => {
-    if (outboundRegex.test(o.tag)) {
-      if (!Array.isArray(o.outbounds)) {
-        o.outbounds = []
-      }
-
-      if (o.outbounds.length === 0) {
-        if (!hasCompatible) {
-          config.outbounds.push(compatibleOutbound)
-          hasCompatible = true
-        }
-
-        o.outbounds.push('COMPATIBLE')
-      }
-    }
-  })
-})
 
 // 注入代理节点
 config.outbounds.push(...proxies)
 
+ensureWindowsMuchGroups(proxyTags)
+
 // 修复 Proxy 主组
 const proxyGroup = config.outbounds.find(o =>
-  o?.tag === 'Proxy' &&
-  Array.isArray(o?.outbounds)
+  o?.tag === 'Proxy' && o?.type === 'selector'
 )
 
 if (!proxyGroup) {
   throw new Error('最终配置中 Proxy 组不存在或格式错误')
 }
-
-// Windows SFW 1.14-alpha44 默认由 outbounds 第一个节点决定
-proxyGroup.outbounds = uniq([
-  ...proxyTags,
-  'direct'
-])
-
-delete proxyGroup.default
 
 // 确保 direct 存在
 if (!config.outbounds.some(o => o?.tag === 'direct')) {
@@ -434,38 +475,16 @@ if (!config.outbounds.some(o => o?.tag === 'direct')) {
   })
 }
 
-// 最后兜底：删除所有 selector/urltest 的 default
-config.outbounds.forEach(o => {
-  if (o && typeof o === 'object') {
-    delete o.default
-  }
-
-  if (
-    (o?.type === 'selector' || o?.type === 'urltest') &&
-    Array.isArray(o.outbounds)
-  ) {
-    o.outbounds = uniq(o.outbounds.filter(x =>
-      x !== 'auto' &&
-      x !== '__PROXY_PLACEHOLDER__' &&
-      x !== 'home' &&
-      x !== 'wg-home'
-    ))
-  }
-})
 
 // 校验
 if (
   proxyGroup.outbounds.includes('home') ||
   proxyGroup.outbounds.includes('wg-home') ||
-  proxyGroup.outbounds.includes('auto') ||
   proxyGroup.outbounds.includes('__PROXY_PLACEHOLDER__')
 ) {
-  throw new Error('no-home 配置中 Proxy 组不应包含 home / wg-home / auto / placeholder')
+  throw new Error('no-home 配置中 Proxy 组不应包含 home / wg-home / placeholder')
 }
-
-if (proxyGroup.outbounds[0] === 'direct') {
-  throw new Error('Proxy 组第一个不能是 direct，否则国外流量会直连')
-}
+validateWindowsMuchGroups()
 
 const proxyDns = config.dns?.servers?.find(s =>
   s?.tag === 'google' ||
