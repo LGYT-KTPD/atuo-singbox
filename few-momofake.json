@@ -12,6 +12,24 @@
   "dns": {
     "servers": [
       {
+        "tag": "hosts_fix",
+        "type": "hosts",
+        "predefined": {
+          "dns.alidns.com": [
+            "223.5.5.5",
+            "223.6.6.6"
+          ],
+          "dns.google": [
+            "8.8.8.8",
+            "8.8.4.4"
+          ],
+          "cloudflare-dns.com": [
+            "1.1.1.1",
+            "1.0.0.1"
+          ]
+        }
+      },
+      {
         "tag": "local",
         "type": "udp",
         "server": "223.5.5.5"
@@ -25,21 +43,21 @@
         "tag": "public",
         "type": "https",
         "server": "dns.alidns.com",
-        "domain_resolver": "local"
+        "domain_resolver": "hosts_fix"
       },
       {
         "tag": "foreign",
         "type": "https",
         "server": "dns.google",
         "detour": "🚀 默认代理",
-        "domain_resolver": "local"
+        "domain_resolver": "hosts_fix"
       },
       {
         "tag": "cloudflare",
         "type": "https",
         "server": "cloudflare-dns.com",
         "detour": "🚀 默认代理",
-        "domain_resolver": "local"
+        "domain_resolver": "hosts_fix"
       },
       {
         "tag": "fakeip",
@@ -257,6 +275,10 @@
         "outbound": "🎯 全球直连"
       },
       {
+        "protocol": "ntp",
+        "outbound": "🎯 全球直连"
+      },
+      {
         "domain_suffix": [
           "ktpd.fun",
           "zdljxdf.vip",
@@ -296,6 +318,11 @@
           "geosite-!cn"
         ],
         "outbound": "🚀 默认代理"
+      },
+      {
+        "action": "route-options",
+        "udp_disable_domain_unmapping": true,
+        "udp_connect": true
       },
       {
         "action": "resolve"
