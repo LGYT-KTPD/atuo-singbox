@@ -1,5 +1,5 @@
 // OpenWrt / momo 专用 Sub-Store 自动注入脚本
-// 目标：sing-box 1.13.12 + momo
+// 目标：sing-box 1.13.14 + momo
 //
 // 参数：
 // name=你的订阅名&type=subscription
@@ -92,23 +92,6 @@ const reservedOutboundTags = new Set([
   'COMPATIBLE',
 ])
 
-const cleanOutbounds = dedupeByTag(
-  generatedOutbounds.filter(o => o && o.tag && o.type)
-)
-
-const cleanEndpoints = dedupeByTag(
-  generatedEndpoints.filter(e => e && e.tag && e.type)
-)
-
-let injectedTags = [
-  ...cleanOutbounds.map(o => o.tag),
-  ...cleanEndpoints.map(e => e.tag),
-]
-
-injectedTags = [...new Set(injectedTags)]
-
-log(`③ 有效可注入节点数量：${injectedTags.length}`)
-
 const defaultGroup = findOutbound(config, '🚀 默认代理')
 const manualGroup = findOutbound(config, '🐸 手动选择')
 const autoGroup = findOutbound(config, '♻️ 自动选择')
@@ -123,6 +106,36 @@ ensureOutbounds(manualGroup)
 ensureOutbounds(autoGroup)
 if (globalGroup) ensureOutbounds(globalGroup)
 
+// 记录上一次注入到选择组里的节点，用于清理已失效订阅节点。
+// 只清理选择组曾引用过的标签，避免误删模板中手工维护的静态出站。
+const previousInjectedTags = new Set([
+  ...manualGroup.outbounds,
+  ...autoGroup.outbounds,
+].filter(tag => typeof tag === 'string' && !reservedOutboundTags.has(tag)))
+
+const allGeneratedTags = new Set()
+
+const cleanOutbounds = sanitizeGeneratedItems(
+  generatedOutbounds,
+  'outbound',
+  allGeneratedTags
+)
+
+const cleanEndpoints = sanitizeGeneratedItems(
+  generatedEndpoints,
+  'endpoint',
+  allGeneratedTags
+)
+
+let injectedTags = [
+  ...cleanOutbounds.map(o => o.tag),
+  ...cleanEndpoints.map(e => e.tag),
+]
+
+injectedTags = [...new Set(injectedTags)]
+
+log(`③ 有效可注入节点数量：${injectedTags.length}`)
+
 if (!findOutbound(config, '🎯 全球直连')) {
   config.outbounds.push({
     tag: '🎯 全球直连',
@@ -132,18 +145,20 @@ if (!findOutbound(config, '🎯 全球直连')) {
 
 log(`④ 清理旧注入节点`)
 
-const injectedTagSet = new Set(injectedTags)
+const newInjectedTagSet = new Set(injectedTags)
 
 config.outbounds = config.outbounds.filter(o => {
   if (!o || !o.tag) return false
   if (reservedOutboundTags.has(o.tag)) return true
-  if (injectedTagSet.has(o.tag)) return false
+  if (previousInjectedTags.has(o.tag)) return false
+  if (newInjectedTagSet.has(o.tag)) return false
   return true
 })
 
 config.endpoints = config.endpoints.filter(e => {
   if (!e || !e.tag) return false
-  if (injectedTagSet.has(e.tag)) return false
+  if (previousInjectedTags.has(e.tag)) return false
+  if (newInjectedTagSet.has(e.tag)) return false
   return true
 })
 
@@ -162,7 +177,9 @@ defaultGroup.outbounds = [
   '🐸 手动选择',
   '🎯 全球直连'
 ]
-defaultGroup.default = defaultGroup.default || '♻️ 自动选择'
+defaultGroup.default = defaultGroup.outbounds.includes(defaultGroup.default)
+  ? defaultGroup.default
+  : '♻️ 自动选择'
 defaultGroup.interrupt_exist_connections = false
 
 manualGroup.outbounds = finalProxyTags
@@ -182,7 +199,9 @@ if (globalGroup) {
     '🐸 手动选择',
     '♻️ 自动选择'
   ]
-  globalGroup.default = globalGroup.default || '🚀 默认代理'
+  globalGroup.default = globalGroup.outbounds.includes(globalGroup.default)
+    ? globalGroup.default
+    : '🚀 默认代理'
   globalGroup.interrupt_exist_connections = false
 }
 
@@ -221,19 +240,24 @@ function ensureCompatible(config) {
   }
 }
 
-function dedupeByTag(list) {
-  const seen = new Set()
+function sanitizeGeneratedItems(list, kind, allGeneratedTags) {
   const result = []
 
   for (const item of list) {
-    if (!item || !item.tag) continue
+    if (!item || typeof item !== 'object') continue
+    if (!item.tag || !item.type) continue
 
-    if (seen.has(item.tag)) {
+    if (reservedOutboundTags.has(item.tag)) {
+      log(`⚠️ 跳过与模板保留标签冲突的 ${kind}：${item.tag}`)
+      continue
+    }
+
+    if (allGeneratedTags.has(item.tag)) {
       log(`⚠️ 跳过重复 tag：${item.tag}`)
       continue
     }
 
-    seen.add(item.tag)
+    allGeneratedTags.add(item.tag)
     result.push(item)
   }
 
