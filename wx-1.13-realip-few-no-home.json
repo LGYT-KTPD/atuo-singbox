@@ -368,28 +368,28 @@
         "tag": "geosite-category-ads-all",
         "type": "remote",
         "format": "binary",
-        "url": "https://ghfast.top/raw.githubusercontent.com/LGYT-KTPD/atuo-singbox-rules/v1.0.0/release/atuo-singbox-rule-v1.0.0/geo/geosite/category-ads-all.srs",
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ads-all.srs",
         "http_client": "direct-download"
       },
       {
         "tag": "geosite-geolocation-!cn",
         "type": "remote",
         "format": "binary",
-        "url": "https://ghfast.top/raw.githubusercontent.com/LGYT-KTPD/atuo-singbox-rules/v1.0.0/release/atuo-singbox-rule-v1.0.0/geo/geosite/geolocation-!cn.srs",
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-!cn.srs",
         "http_client": "direct-download"
       },
       {
         "tag": "geoip-cn",
         "type": "remote",
         "format": "binary",
-        "url": "https://ghfast.top/raw.githubusercontent.com/LGYT-KTPD/atuo-singbox-rules/v1.0.0/release/atuo-singbox-rule-v1.0.0/geo/geoip/cn.srs",
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/cn.srs",
         "http_client": "direct-download"
       },
       {
         "tag": "geosite-cn",
         "type": "remote",
         "format": "binary",
-        "url": "https://ghfast.top/raw.githubusercontent.com/LGYT-KTPD/atuo-singbox-rules/v1.0.0/release/atuo-singbox-rule-v1.0.0/geo/geosite/cn.srs",
+        "url": "https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs",
         "http_client": "direct-download"
       }
     ],
