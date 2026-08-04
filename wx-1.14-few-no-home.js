@@ -28,11 +28,14 @@ function applyAlpha44PkOptimizations() {
   if (!Array.isArray(config.route.rule_set)) config.route.rule_set = []
   if (!Array.isArray(config.http_clients)) config.http_clients = []
 
+  config.experimental.clash_api.external_ui_download_url =
+    'https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip'
+
   delete config.experimental.clash_api.external_ui_download_detour
   delete config.experimental.clash_api.external_ui_http_client
 
   config.experimental.cache_file.enabled = true
-  config.experimental.cache_file.store_dns = true
+  delete config.experimental.cache_file.store_dns
   delete config.experimental.cache_file.store_fakeip
 
   config.dns.reverse_mapping = true
@@ -212,13 +215,15 @@ if (Array.isArray(config.route.rules)) {
 }
 
 const downloadDomains = [
-  'ghfast.top',
-  'raw.githubusercontent.com',
   'github.com',
-  'gh-proxy.com',
+  'githubusercontent.com',
+  'githubassets.com',
+  'github.io',
+  'raw.githubusercontent.com',
+  'objects.githubusercontent.com',
   'ghproxy.net',
-  'testingcf.jsdelivr.net',
-  'cdn.jsdelivr.net'
+  'cdn.jsdelivr.net',
+  'testingcf.jsdelivr.net'
 ]
 
 let downloadDnsRule = config.dns.rules.find(r =>
@@ -262,10 +267,6 @@ if (Array.isArray(config.route.rule_set)) {
         .replace(
           'https://testingcf.jsdelivr.net/gh/Toperlock/sing-box-geosite@main/',
           'https://ghfast.top/raw.githubusercontent.com/Toperlock/sing-box-geosite/main/'
-        )
-        .replace(
-          'https://raw.githubusercontent.com/',
-          'https://ghfast.top/raw.githubusercontent.com/'
         )
     }
 
