@@ -1,5 +1,5 @@
 // OpenWrt / momo 专用 Sub-Store 自动注入脚本
-// 目标：sing-box 1.13.14 + momo
+// 目标：sing-box 1.14.0 + momo
 //
 // 参数：
 // name=你的订阅名&type=subscription
@@ -216,6 +216,9 @@ fixRuleSetReferences(config)
 log(`⑧ 检查 momo 必要入口`)
 checkMomoInbounds(config)
 
+log(`⑨ 应用 sing-box 1.14.0 兼容清理`)
+applySingBox114Compat(config)
+
 $content = JSON.stringify(config, null, 2)
 
 log(`✅ 完成：已注入 ${finalProxyTags.length} 个节点`)
@@ -306,6 +309,50 @@ function checkMomoInbounds(config) {
   for (const tag of ['dns-in', 'redirect-in', 'tproxy-in', 'tun-in']) {
     if (!tags.has(tag)) {
       throw new Error(`momo 模板缺少必要 inbound：${tag}`)
+    }
+  }
+}
+
+function applySingBox114Compat(config) {
+  // sing-box 1.14.0:
+  // 1. dns.independent_cache 已弃用
+  // 2. dns.rules[*].strategy 旧式 DNS rule action 已弃用；
+  //    保留顶层 dns.strategy
+  // 3. cache_file.store_rdrc / rdrc_timeout 迁移到 store_dns
+
+  if (config.dns && typeof config.dns === 'object') {
+    delete config.dns.independent_cache
+
+    if (Array.isArray(config.dns.rules)) {
+      for (const rule of config.dns.rules) {
+        cleanLegacyDnsRuleStrategy(rule)
+      }
+    }
+  }
+
+  const cache = config.experimental?.cache_file
+  if (cache && typeof cache === 'object') {
+    const hadRdrc =
+      Object.prototype.hasOwnProperty.call(cache, 'store_rdrc') ||
+      Object.prototype.hasOwnProperty.call(cache, 'rdrc_timeout')
+
+    delete cache.store_rdrc
+    delete cache.rdrc_timeout
+
+    if (hadRdrc && cache.store_dns === undefined) {
+      cache.store_dns = true
+    }
+  }
+}
+
+function cleanLegacyDnsRuleStrategy(rule) {
+  if (!rule || typeof rule !== 'object') return
+
+  delete rule.strategy
+
+  if (Array.isArray(rule.rules)) {
+    for (const subRule of rule.rules) {
+      cleanLegacyDnsRuleStrategy(subRule)
     }
   }
 }
