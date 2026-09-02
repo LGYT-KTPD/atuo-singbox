@@ -330,6 +330,21 @@ function applySingBox114Compat(config) {
     }
   }
 
+  // sing-box 1.14.0 不允许 DNS 规则直接引用纯 IP CIDR rule-set。
+  // telegramip 继续保留在 route.rules 中，仅从 DNS FakeIP 规则移除。
+  if (config.dns && Array.isArray(config.dns.rules)) {
+    for (const rule of config.dns.rules) {
+      if (
+        rule &&
+        rule.server === 'fakeip' &&
+        Array.isArray(rule.rule_set) &&
+        rule.rule_set.includes('telegramip')
+      ) {
+        rule.rule_set = rule.rule_set.filter(tag => tag !== 'telegramip')
+      }
+    }
+  }
+
   const cache = config.experimental?.cache_file
   if (cache && typeof cache === 'object') {
     const hadRdrc =
