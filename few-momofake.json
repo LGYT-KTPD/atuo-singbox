@@ -114,8 +114,7 @@
           "url.cn",
           "weiyun.com"
         ],
-        "server": "public",
-        "strategy": "ipv4_only"
+        "server": "public"
       },
       {
         "domain_suffix": [
@@ -155,7 +154,6 @@
     ],
     "final": "foreign",
     "strategy": "ipv4_only",
-    "independent_cache": true,
     "reverse_mapping": true,
     "cache_capacity": 65536
   },
@@ -482,8 +480,7 @@
       "path": "/etc/momo/run/cache.db",
       "cache_id": "momo",
       "store_fakeip": true,
-      "store_rdrc": true,
-      "rdrc_timeout": "7d"
+      "store_dns": true
     },
     "clash_api": {
       "external_controller": "0.0.0.0:9095",
