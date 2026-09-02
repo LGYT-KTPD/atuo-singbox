@@ -141,8 +141,7 @@
           "geosite-youtube",
           "proxy",
           "games",
-          "ai",
-          "telegramip"
+          "ai"
         ],
         "query_type": [
           "A",
