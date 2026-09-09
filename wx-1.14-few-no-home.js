@@ -55,12 +55,12 @@ function applyAlpha44PkOptimizations() {
   )
 
   config.route.default_domain_resolver = 'local-dns'
-  config.route.default_http_client = 'direct-download'
+  config.route.default_http_client = 'proxy-download'
 
   config.route.rule_set = config.route.rule_set.map(rs => {
     if (rs?.type === 'remote') {
       delete rs.download_detour
-    rs.http_client = 'direct-download'
+    rs.http_client = 'proxy-download'
     }
     return rs
   })
@@ -271,10 +271,10 @@ if (Array.isArray(config.route.rule_set)) {
     }
 
     delete rs.download_detour
-    rs.http_client = 'direct-download'
+    rs.http_client = 'proxy-download'
 
     if (rs?.type === 'remote') {
-      rs.http_client = 'direct-download'
+      rs.http_client = 'proxy-download'
     }
 
     return rs
