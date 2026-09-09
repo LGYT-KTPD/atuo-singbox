@@ -370,31 +370,31 @@
         "type": "remote",
         "format": "binary",
         "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ads-all.srs",
-        "http_client": "direct-download"
+        "http_client": "proxy-download"
       },
       {
         "tag": "geosite-geolocation-!cn",
         "type": "remote",
         "format": "binary",
         "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-!cn.srs",
-        "http_client": "direct-download"
+        "http_client": "proxy-download"
       },
       {
         "tag": "geoip-cn",
         "type": "remote",
         "format": "binary",
         "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/cn.srs",
-        "http_client": "direct-download"
+        "http_client": "proxy-download"
       },
       {
         "tag": "geosite-cn",
         "type": "remote",
         "format": "binary",
         "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs",
-        "http_client": "direct-download"
+        "http_client": "proxy-download"
       }
     ],
-    "default_http_client": "direct-download"
+    "default_http_client": "proxy-download"
   },
   "http_clients": [
     {
