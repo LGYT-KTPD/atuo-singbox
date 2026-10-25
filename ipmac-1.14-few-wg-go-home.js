@@ -127,14 +127,14 @@ function applyAlpha44PkStableOptimizations() {
   )
 
   config.route.default_domain_resolver = 'local-dns'
-  config.route.default_http_client = 'direct'
+  config.route.default_http_client = 'proxy'
   config.route.auto_detect_interface = true
   config.route.final = 'Proxy'
 
   config.route.rule_set = config.route.rule_set.map(rs => {
     if (rs?.type === 'remote') {
       delete rs.download_detour
-      rs.http_client = 'direct'
+      rs.http_client = 'proxy'
     }
     return rs
   })
@@ -394,7 +394,7 @@ config.dns.optimistic = {
 // DNS-v2：启动/bootstrap 依赖 hosts-fix/local-dns，正常运行默认 DNS 走 proxy-dns，避免 BrowserLeaks 暴露国内 DNS
 config.dns.final = 'proxy-dns'
 
-// http client v2：区分 direct / proxy
+// http client v2：规则集下载与默认 HTTP 请求走 proxy；保留 direct client 供显式直连场景
 config.http_clients = config.http_clients.filter(c =>
   c?.tag !== 'direct' &&
   c?.tag !== 'proxy'
@@ -412,7 +412,7 @@ config.http_clients.unshift(
   }
 )
 
-config.route.default_http_client = 'direct'
+config.route.default_http_client = 'proxy'
 // route 解析器仍走 local-dns：用于启动期、rule-set 下载、直连域名解析；不作为 DNS final
 config.route.default_domain_resolver = 'local-dns'
 config.route.auto_detect_interface = true
@@ -992,7 +992,7 @@ if (Array.isArray(config.route.rule_set)) {
     }
 
     delete rs.download_detour
-    rs.http_client = 'direct'
+    rs.http_client = 'proxy'
 
     return rs
   })
@@ -1041,8 +1041,8 @@ if (config.experimental?.clash_api?.external_ui_http_client !== undefined) {
 if (config.route?.rule_set?.some(rs => rs?.download_detour !== undefined)) {
   throw new Error('alpha44 配置不应包含 rule_set.download_detour')
 }
-if (config.route?.rule_set?.some(rs => rs?.type === 'remote' && rs?.http_client !== 'direct')) {
-  throw new Error('远程 rule-set 必须使用 http_client=direct')
+if (config.route?.rule_set?.some(rs => rs?.type === 'remote' && rs?.http_client !== 'proxy')) {
+  throw new Error('远程 rule-set 必须使用 http_client=proxy')
 }
 const directHttpClient = config.http_clients?.find(c => c?.tag === 'direct')
 if (directHttpClient?.detour !== undefined) {
