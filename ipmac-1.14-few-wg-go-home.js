@@ -979,15 +979,15 @@ if (Array.isArray(config.route.rule_set)) {
       rs.url = rs.url
         .replace(
           'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/',
-          'https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/'
+          'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/'
         )
         .replace(
-          'https://raw.githubusercontent.com/',
-          'https://ghfast.top/raw.githubusercontent.com/'
+          'https://ghfast.top/raw.githubusercontent.com/',
+          'https://raw.githubusercontent.com/'
         )
         .replace(
           'https://testingcf.jsdelivr.net/gh/Toperlock/sing-box-geosite@main/',
-          'https://ghfast.top/raw.githubusercontent.com/Toperlock/sing-box-geosite/main/'
+          'https://raw.githubusercontent.com/Toperlock/sing-box-geosite/main/'
         )
     }
 
