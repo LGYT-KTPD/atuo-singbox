@@ -70,14 +70,14 @@ function applyAlpha44PkStableOptimizations() {
   )
 
   config.route.default_domain_resolver = 'local-dns'
-  config.route.default_http_client = 'direct'
+  config.route.default_http_client = 'proxy'
   config.route.auto_detect_interface = true
   config.route.final = 'Proxy'
 
   config.route.rule_set = config.route.rule_set.map(rs => {
     if (rs?.type === 'remote') {
       delete rs.download_detour
-      rs.http_client = 'direct'
+      rs.http_client = 'proxy'
     }
     return rs
   })
@@ -360,8 +360,8 @@ config.http_clients.unshift(
   }
 )
 
-config.route.default_http_client = 'direct'
-// route 解析器仍走 local-dns：用于启动期、rule-set 下载、直连域名解析；不作为 DNS final
+config.route.default_http_client = 'proxy'
+// route 解析器仍走 local-dns：用于启动期及直连域名解析；rule-set 下载通过 proxy；不作为 DNS final
 config.route.default_domain_resolver = 'local-dns'
 config.route.auto_detect_interface = true
 config.route.final = 'Proxy'
@@ -795,21 +795,21 @@ if (Array.isArray(config.route.rule_set)) {
     if (rs?.type === 'remote' && typeof rs.url === 'string') {
       rs.url = rs.url
         .replace(
-          'https://raw.githubusercontent.com/',
-          'https://ghfast.top/raw.githubusercontent.com/'
+          'https://ghfast.top/raw.githubusercontent.com/',
+          'https://raw.githubusercontent.com/'
         )
         .replace(
           'https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/',
-          'https://ghfast.top/raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/'
+          'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/'
         )
         .replace(
           'https://testingcf.jsdelivr.net/gh/Toperlock/sing-box-geosite@main/',
-          'https://ghfast.top/raw.githubusercontent.com/Toperlock/sing-box-geosite/main/'
+          'https://raw.githubusercontent.com/Toperlock/sing-box-geosite/main/'
         )
     }
 
     delete rs.download_detour
-    rs.http_client = 'direct'
+    rs.http_client = 'proxy'
     return rs
   })
 }
@@ -925,8 +925,8 @@ if (config.experimental?.clash_api?.external_ui_http_client !== undefined) {
 if (config.route?.rule_set?.some(rs => rs?.download_detour !== undefined)) {
   throw new Error('alpha44 配置不应包含 rule_set.download_detour')
 }
-if (config.route?.rule_set?.some(rs => rs?.type === 'remote' && rs?.http_client !== 'direct')) {
-  throw new Error('远程 rule-set 必须使用 http_client=direct')
+if (config.route?.rule_set?.some(rs => rs?.type === 'remote' && rs?.http_client !== 'proxy')) {
+  throw new Error('远程 rule-set 必须使用 http_client=proxy')
 }
 const directHttpClient = config.http_clients?.find(c => c?.tag === 'direct')
 if (directHttpClient?.detour !== undefined) {
