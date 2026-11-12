@@ -186,7 +186,40 @@ function getProxyServerIPv4List(proxies) {
   return [...new Set(servers)]
 }
 
-function ensureSelfBuiltServerDirectRule(proxies) {
+
+function ensureMicrosoftDirectRule() {
+  if (!config.route) config.route = {}
+  if (!Array.isArray(config.route.rules)) config.route.rules = []
+  if (!Array.isArray(config.route.rule_set)) config.route.rule_set = []
+
+  const tag = 'geosite-microsoft'
+  const url = 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/microsoft.srs'
+
+  if (!config.route.rule_set.some(rs => rs?.tag === tag)) {
+    config.route.rule_set.push({
+      tag,
+      type: 'remote',
+      format: 'binary',
+      url,
+      http_client: 'proxy-download'
+    })
+  }
+
+  // Keep Microsoft direct ahead of geolocation-!cn, which otherwise sends it to Proxy.
+  config.route.rules = config.route.rules.filter(r =>
+    !(r?.rule_set === tag && r?.outbound === 'direct')
+  )
+  const index = config.route.rules.findIndex(r =>
+    r?.rule_set === 'geosite-geolocation-!cn'
+  )
+  config.route.rules.splice(index >= 0 ? index : config.route.rules.length, 0, {
+    rule_set: tag,
+    outbound: 'direct'
+  })
+}
+
+function ensureSelfBuiltServerDirectRule(proxies)
+ensureMicrosoftDirectRule() {
   if (!config.route) config.route = {}
   if (!Array.isArray(config.route.rules)) config.route.rules = []
 
