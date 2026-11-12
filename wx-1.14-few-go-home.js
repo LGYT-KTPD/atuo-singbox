@@ -218,8 +218,7 @@ function ensureMicrosoftDirectRule() {
   })
 }
 
-function ensureSelfBuiltServerDirectRule(proxies)
-ensureMicrosoftDirectRule() {
+function ensureSelfBuiltServerDirectRule(proxies) {
   if (!config.route) config.route = {}
   if (!Array.isArray(config.route.rules)) config.route.rules = []
 
@@ -490,6 +489,7 @@ if (!homeRouteRule) {
 
 
 ensureSelfBuiltServerDirectRule(proxies)
+ensureMicrosoftDirectRule()
 
 
 const directDownloadClient = config.http_clients?.find(c => c?.tag === 'direct-download')
