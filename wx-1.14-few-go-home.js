@@ -18,6 +18,69 @@ function removeDnsRuleStrategy(rule) {
   return rule
 }
 
+const microsoftDirectDomains = [
+  'microsoft.com',
+  'msedge.net',
+  'windowsupdate.com',
+  'windows.com',
+  'windows.net',
+  'microsoftonline.com',
+  'microsoftonline-p.com',
+  'msauth.net',
+  'msftauth.net',
+  'msauthimages.net',
+  'msftauthimages.net',
+  'msftconnecttest.com',
+  'msftncsi.com'
+]
+
+function applyMicrosoftDirectRules() {
+  if (!config.dns) config.dns = {}
+  if (!Array.isArray(config.dns.rules)) config.dns.rules = []
+  if (!config.route) config.route = {}
+  if (!Array.isArray(config.route.rules)) config.route.rules = []
+
+  const insertManagedRule = (rules, isManagedRule, buildRule, isFallbackRule) => {
+    const existingIndex = rules.findIndex(isManagedRule)
+    const existing = existingIndex >= 0 ? rules.splice(existingIndex, 1)[0] : null
+    const rule = buildRule(existing)
+    const insertIndex = rules.findIndex(isFallbackRule)
+    rules.splice(insertIndex >= 0 ? insertIndex : rules.length, 0, rule)
+  }
+
+  // DNS：微软域名优先使用国内 local-dns，避免命中 proxy-dns
+  insertManagedRule(
+    config.dns.rules,
+    r => r?.server === 'local-dns' &&
+      Array.isArray(r?.domain_suffix) &&
+      r.domain_suffix.some(d => microsoftDirectDomains.includes(d)),
+    existing => ({
+      ...(existing || {}),
+      domain_suffix: [...new Set([...(existing?.domain_suffix || []), ...microsoftDirectDomains])],
+      action: 'route',
+      server: 'local-dns'
+    }),
+    r => r?.clash_mode === 'global' ||
+      r?.rule_set === 'geosite-geolocation-!cn'
+  )
+
+  // 路由：微软域名优先 DIRECT，排在 global / geolocation-!cn 代理规则之前
+  insertManagedRule(
+    config.route.rules,
+    r => r?.outbound === 'direct' &&
+      Array.isArray(r?.domain_suffix) &&
+      r.domain_suffix.some(d => microsoftDirectDomains.includes(d)),
+    existing => ({
+      ...(existing || {}),
+      domain_suffix: [...new Set([...(existing?.domain_suffix || []), ...microsoftDirectDomains])],
+      outbound: 'direct'
+    }),
+    r => r?.clash_mode === 'global' ||
+      r?.rule_set === 'geosite-geolocation-!cn' ||
+      (Array.isArray(r?.rule_set) && r.rule_set.includes('geosite-geolocation-!cn'))
+  )
+}
+
 function applyAlpha44PkOptimizations() {
   if (!config.experimental) config.experimental = {}
   if (!config.experimental.cache_file) config.experimental.cache_file = {}
@@ -186,38 +249,6 @@ function getProxyServerIPv4List(proxies) {
   return [...new Set(servers)]
 }
 
-
-function ensureMicrosoftDirectRule() {
-  if (!config.route) config.route = {}
-  if (!Array.isArray(config.route.rules)) config.route.rules = []
-  if (!Array.isArray(config.route.rule_set)) config.route.rule_set = []
-
-  const tag = 'geosite-microsoft'
-  const url = 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/microsoft.srs'
-
-  if (!config.route.rule_set.some(rs => rs?.tag === tag)) {
-    config.route.rule_set.push({
-      tag,
-      type: 'remote',
-      format: 'binary',
-      url,
-      http_client: 'proxy-download'
-    })
-  }
-
-  // Keep Microsoft direct ahead of geolocation-!cn, which otherwise sends it to Proxy.
-  config.route.rules = config.route.rules.filter(r =>
-    !(r?.rule_set === tag && r?.outbound === 'direct')
-  )
-  const index = config.route.rules.findIndex(r =>
-    r?.rule_set === 'geosite-geolocation-!cn'
-  )
-  config.route.rules.splice(index >= 0 ? index : config.route.rules.length, 0, {
-    rule_set: tag,
-    outbound: 'direct'
-  })
-}
-
 function ensureSelfBuiltServerDirectRule(proxies) {
   if (!config.route) config.route = {}
   if (!Array.isArray(config.route.rules)) config.route.rules = []
@@ -262,6 +293,7 @@ try {
 
 applyAlpha44PkOptimizations()
 applyWgHome()
+applyMicrosoftDirectRules()
 
 if (!config.experimental) config.experimental = {}
 if (!config.experimental.clash_api) config.experimental.clash_api = {}
@@ -489,7 +521,6 @@ if (!homeRouteRule) {
 
 
 ensureSelfBuiltServerDirectRule(proxies)
-ensureMicrosoftDirectRule()
 
 
 const directDownloadClient = config.http_clients?.find(c => c?.tag === 'direct-download')
