@@ -129,17 +129,31 @@
         "server": "local-dns"
       },
       {
+        "domain_suffix": [
+          "microsoft.com",
+          "msedge.net",
+          "windowsupdate.com",
+          "windows.com",
+          "windows.net",
+          "microsoftonline.com",
+          "microsoftonline-p.com",
+          "msauth.net",
+          "msftauth.net",
+          "msauthimages.net",
+          "msftauthimages.net",
+          "msftconnecttest.com",
+          "msftncsi.com"
+        ],
+        "action": "route",
+        "server": "local-dns"
+      },
+      {
         "clash_mode": "global",
         "action": "route",
         "server": "proxy-dns"
       },
       {
         "rule_set": "geosite-cn",
-        "action": "route",
-        "server": "local-dns"
-      },
-      {
-        "rule_set": "geosite-microsoft",
         "action": "route",
         "server": "local-dns"
       },
@@ -296,6 +310,24 @@
         "outbound": "direct"
       },
       {
+        "domain_suffix": [
+          "microsoft.com",
+          "msedge.net",
+          "windowsupdate.com",
+          "windows.com",
+          "windows.net",
+          "microsoftonline.com",
+          "microsoftonline-p.com",
+          "msauth.net",
+          "msftauth.net",
+          "msauthimages.net",
+          "msftauthimages.net",
+          "msftconnecttest.com",
+          "msftncsi.com"
+        ],
+        "outbound": "direct"
+      },
+      {
         "clash_mode": "global",
         "outbound": "Proxy"
       },
@@ -310,10 +342,6 @@
       },
       {
         "ip_is_private": true,
-        "outbound": "direct"
-      },
-      {
-        "rule_set": "geosite-microsoft",
         "outbound": "direct"
       },
       {
@@ -400,13 +428,6 @@
         "type": "remote",
         "format": "binary",
         "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs",
-        "http_client": "proxy-download"
-      },
-      {
-        "tag": "geosite-microsoft",
-        "type": "remote",
-        "format": "binary",
-        "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/microsoft.srs",
         "http_client": "proxy-download"
       }
     ],
